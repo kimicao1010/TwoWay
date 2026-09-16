@@ -72,6 +72,13 @@ struct RootView: View {
                 router.screen = .addAccount
                 debugInitialMethod = .importImage
             }
+            // --debug-import-file <path>：启动即模拟「拖入图片解码 → 导入」完整链路
+            // （手工回归用：免掉无障碍权限下无法程序化拖放的局限）
+            if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--debug-import-file"),
+               index + 1 < ProcessInfo.processInfo.arguments.count {
+                let path = ProcessInfo.processInfo.arguments[index + 1]
+                importImageForDebug(at: path)
+            }
             #endif
         }
     }
@@ -105,6 +112,34 @@ struct RootView: View {
         store.setOpenedRow(nil)   // R9/E8：离开列表屏时行复位
         router.screen = screen
     }
+
+    #if DEBUG
+    /// 调试链路：与 ImportImageView 相同的「解码 → resolve → 入库」路径
+    private func importImageForDebug(at path: String) {
+        guard
+            let image = NSImage(contentsOfFile: path),
+            let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return }
+        let strings = (try? QRImageDecoder.decode(in: cgImage)) ?? []
+        let fields: [QRImport.PrefilledAccount]
+        switch QRImport.resolve(strings) {
+        case .account(let single):
+            fields = [single]
+        case .migrated(let multiple, _):
+            fields = multiple
+        default:
+            return
+        }
+        for field in fields {
+            try? store.add(
+                displayName: field.displayName,
+                issuer: field.issuer,
+                secretBase32: field.secretBase32,
+                parameters: field.parameters
+            )
+        }
+    }
+    #endif
 }
 
 #Preview {
