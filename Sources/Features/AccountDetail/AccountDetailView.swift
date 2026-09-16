@@ -10,6 +10,8 @@ struct AccountDetailView: View {
     var onCancelDelete: () -> Void
     /// P1 C4-2：进入编辑页
     var onRequestEdit: () -> Void
+    /// 返回列表（问题反馈：详情页原先没有退出路径）
+    var onBack: () -> Void
     /// 确认删除后回调（回列表 + toast「已删除「名称」」）
     var onDeleted: (String) -> Void
 
@@ -25,26 +27,32 @@ struct AccountDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WindowTitlebar(title: "账户详情") {
-                HStack(spacing: 14) {
-                    // 编辑账户（P1 C4-2）
-                    Button(action: onRequestEdit) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(Token.Palette.t2)
-                    }
-                    .buttonStyle(.plain)
-                    .help("编辑账户")
+            WindowTitlebar(
+                title: "账户详情",
+                leading: {
+                    TitlebarBackButton(action: onBack)
+                },
+                trailing: {
+                    HStack(spacing: 14) {
+                        // 编辑账户（P1 C4-2）
+                        Button(action: onRequestEdit) {
+                            Image(systemName: "square.and.pencil")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(Token.Palette.t2)
+                        }
+                        .buttonStyle(.plain)
+                        .help("编辑账户")
 
-                    Button(action: onRequestDeleteDialog) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(Token.Palette.dangerText)
+                        Button(action: onRequestDeleteDialog) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(Token.Palette.dangerText)
+                        }
+                        .buttonStyle(.plain)
+                        .help("删除账户")
                     }
-                    .buttonStyle(.plain)
-                    .help("删除账户")
                 }
-            }
+            )
             Divider1px()
 
             ScrollView {
@@ -65,6 +73,14 @@ struct AccountDetailView: View {
             }
         }
         .animation(.easeOut(duration: 0.22), value: showsDeleteDialog)
+        // Esc：弹窗打开时先关弹窗，否则返回列表
+        .onExitCommand {
+            if showsDeleteDialog {
+                onCancelDelete()
+            } else {
+                onBack()
+            }
+        }
     }
 
     // MARK: 身份区（64×64 圆角18 渐变 + 名 20 + 标识 13）

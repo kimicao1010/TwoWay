@@ -125,12 +125,16 @@ final class RingLayerView: NSView {
     private let trackLayer = CAShapeLayer()
     private let progressLayer = CAShapeLayer()
     private var strokeWidth: CGFloat = 3
+    /// 环的目标直径 —— 由 `configure` 显式传入，不依赖 NSView 何时被布局
+    private var ringSize: CGFloat = 28
     private var isWarning = false
     private var lastCounter: UInt64?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        // 不裁剪：路径本身按 ringSize 精确计算（见 updateLayerGeometry），
+        // 早先加 masksToBounds 反而把未更新尺寸的环整个裁掉
 
         for layer in [trackLayer, progressLayer] {
             layer.fillColor = NSColor.clear.cgColor
@@ -149,7 +153,7 @@ final class RingLayerView: NSView {
         fatalError("不支持 IB 初始化")
     }
 
-    func configure(period: TimeInterval, heroTrack: Bool, strokeWidth: CGFloat) {
+    func configure(period: TimeInterval, heroTrack: Bool, strokeWidth: CGFloat, size: CGFloat) {
         if self.period != period {
             self.period = period
             lastCounter = nil   // 周期变更：下一 tick 重设进度动画
@@ -162,9 +166,17 @@ final class RingLayerView: NSView {
             self.strokeWidth = strokeWidth
             trackLayer.lineWidth = strokeWidth
             progressLayer.lineWidth = strokeWidth
-            needsLayerGeometryUpdate = true
-            needsLayout = true
         }
+        if self.ringSize != size {
+            self.ringSize = size
+            invalidateIntrinsicContentSize()
+        }
+        updateLayerGeometry()
+    }
+
+    /// 环的固有尺寸：让 SwiftUI 与 AppKit 对尺寸的判断一致
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: ringSize, height: ringSize)
     }
 
     override func viewDidMoveToWindow() {
@@ -177,22 +189,43 @@ final class RingLayerView: NSView {
         }
     }
 
-    private var needsLayerGeometryUpdate = true
+    /// ⚠️ 尺寸变化必须重算路径。
+    ///
+    /// 教训：只实现 `layout()` 是不够的 —— SwiftUI 调整 NSView frame 时不一定触发
+    /// `layout()`，导致路径停留在初始（更大的）bounds 上：详情页会画出直径数百 pt
+    /// 的巨圆压住参数卡，列表里环也会偏离垂直居中位置。
+    /// 因此这里在 `setFrameSize`（尺寸变更的唯一必经点）里同步重算。
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateLayerGeometry()
+    }
 
     override func layout() {
         super.layout()
-        let radius = (min(bounds.width, bounds.height) - strokeWidth) / 2
-        guard radius > 0 else { return }
-        let rect = CGRect(
-            x: bounds.midX - radius,
-            y: bounds.midY - radius,
-            width: radius * 2,
-            height: radius * 2
-        )
-        trackLayer.path = CGPath(ellipseIn: rect, transform: nil)
-        progressLayer.path = trackLayer.path
-        needsLayerGeometryUpdate = false
+        updateLayerGeometry()
         tick()   // 尺寸变化后立即对齐当前进度
+    }
+
+    /// 按 `ringSize` 精确计算路径并居中放置。
+    ///
+    /// ⚠️ 关键：子 layer 的 `frame` 必须与视图 bounds 一致。
+    /// 早先没设 frame（零尺寸）→ anchorPoint 落在 (0,0)，而为了「起点 12 点钟」
+    /// 做的 `-90°` 旋转是绕 anchorPoint 进行的，于是整个圆被平移到视图之外
+    /// （表现为巨大/错位的圆压住相邻内容）。
+    private func updateLayerGeometry() {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let side = max(ringSize - strokeWidth, 1)
+        let rect = CGRect(
+            x: bounds.midX - side / 2,
+            y: bounds.midY - side / 2,
+            width: side,
+            height: side
+        )
+        let path = CGPath(ellipseIn: rect, transform: nil)
+        for layer in [trackLayer, progressLayer] {
+            layer.frame = bounds            // 让 anchorPoint = 圆心，旋转才不会挪走圆
+            layer.path = path
+        }
     }
 
     /// 30Hz 时钟回调：只在**周期切换**时重设动画（否则零 layer 写入）。
@@ -255,7 +288,8 @@ struct CountdownRing: View {
         CountdownRingRepresentable(
             period: period,
             heroTrack: heroTrack,
-            strokeWidth: strokeWidth
+            strokeWidth: strokeWidth,
+            size: size
         )
         .frame(width: size, height: size)
     }
@@ -265,14 +299,15 @@ private struct CountdownRingRepresentable: NSViewRepresentable {
     let period: TimeInterval
     let heroTrack: Bool
     let strokeWidth: CGFloat
+    let size: CGFloat
 
     func makeNSView(context: Context) -> RingLayerView {
         let view = RingLayerView()
-        view.configure(period: period, heroTrack: heroTrack, strokeWidth: strokeWidth)
+        view.configure(period: period, heroTrack: heroTrack, strokeWidth: strokeWidth, size: size)
         return view
     }
 
     func updateNSView(_ nsView: RingLayerView, context: Context) {
-        nsView.configure(period: period, heroTrack: heroTrack, strokeWidth: strokeWidth)
+        nsView.configure(period: period, heroTrack: heroTrack, strokeWidth: strokeWidth, size: size)
     }
 }

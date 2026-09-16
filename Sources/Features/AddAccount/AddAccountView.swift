@@ -87,6 +87,7 @@ struct AddAccountView: View {
                 method = initialMethod
             }
         }
+        .onExitCommand(perform: handleCancel)   // Esc = 取消（与「取消」按钮一致）
     }
 
     private static func segmentTitle(_ method: Method) -> String {

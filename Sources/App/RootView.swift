@@ -78,6 +78,7 @@ struct RootView: View {
                         onRequestDeleteDialog: { router.showsDeleteDialog = true },
                         onCancelDelete: { router.showsDeleteDialog = false },
                         onRequestEdit: { router.screen = .editAccount },
+                        onBack: { show(.list) },
                         onDeleted: { name in
                             show(.list)
                             toast.show("已删除「\(name)」")
@@ -183,6 +184,11 @@ struct RootView: View {
                         backupSheetError = nil
                         router.backupSheet = .importBackup
                     }
+                    Divider()
+                    Button("导出 GA 迁移码（PNG）…") {
+                        backupSheetError = nil
+                        router.backupSheet = .exportGAMigration
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .medium))
@@ -246,6 +252,13 @@ struct RootView: View {
                 onCancel: dismissBackupSheet,
                 onImport: importBackup(password:)
             )
+        case .exportGAMigration:
+            GAMigrationExportSheet(
+                accountCount: store.accounts.count,
+                errorMessage: $backupSheetError,
+                onCancel: dismissBackupSheet,
+                onExport: exportGAMigration
+            )
         case nil:
             EmptyView()
         }
@@ -283,6 +296,53 @@ struct RootView: View {
                     )
                     dismissBackupSheet()
                     toast.show("已导出 \(entries.count) 个账户")
+                } catch {
+                    backupSheetError = "写入文件失败，请换一个位置重试"
+                }
+            }
+        }
+    }
+
+    /// 导出 GA 迁移码：账户 → `otpauth-migration://` → 二维码 PNG
+    ///
+    /// 注意：迁移码是明文载荷（GA 格式只做 base64），弹窗已向用户明示风险。
+    private func exportGAMigration() {
+        let entries = store.backupEntries().map { entry in
+            OTPMigration.Entry(
+                displayName: entry.displayName,
+                issuer: entry.issuer,
+                secret: entry.secret,
+                parameters: entry.parameters
+            )
+        }
+        guard !entries.isEmpty else {
+            backupSheetError = "还没有可导出的账户"
+            return
+        }
+
+        let uri = OTPMigration.migrationURI(entries: entries)
+        let pngData: Data
+        do {
+            pngData = try QRCodeImage.pngData(for: uri)
+        } catch {
+            backupSheetError = "二维码生成失败，请重试"
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.title = "导出 GA 迁移码"
+        panel.nameFieldStringValue = "2way-ga-migration-\(Self.fileStamp()).png"
+        panel.begin { response in
+            Task { @MainActor in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    try pngData.write(to: url, options: .atomic)
+                    try? FileManager.default.setAttributes(
+                        [.posixPermissions: 0o600],
+                        ofItemAtPath: url.path
+                    )
+                    dismissBackupSheet()
+                    toast.show("已导出 GA 迁移码（\(entries.count) 个账户）")
                 } catch {
                     backupSheetError = "写入文件失败，请换一个位置重试"
                 }

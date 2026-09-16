@@ -141,6 +141,78 @@ enum OTPMigration {
         )
     }
 
+    // MARK: - 编码（导出给 Google Authenticator 扫描导入）
+
+    /// 把账户编码为 GA 可导入的迁移码 URI。
+    ///
+    /// ⚠️ 迁移码载荷是**明文**（只做 base64），即二维码图片本身等价于密钥明文 ——
+    /// 调用方必须向用户明示这一点，并提示用完即删。
+    static func migrationURI(entries: [Entry]) -> String {
+        var payload: [UInt8] = []
+        for entry in entries {
+            var parameters: [UInt8] = []
+            parameters += protoBytes(field: 1, value: entry.secret)
+
+            // GA 约定 label = "Issuer:account"；无发行方时只有 account
+            let label: String
+            if let issuer = entry.issuer, !issuer.isEmpty {
+                label = "\(issuer):\(entry.displayName)"
+            } else {
+                label = entry.displayName
+            }
+            parameters += protoBytes(field: 2, value: Data(label.utf8))
+
+            if let issuer = entry.issuer, !issuer.isEmpty {
+                parameters += protoBytes(field: 3, value: Data(issuer.utf8))
+            }
+            parameters += protoVarint(field: 4, value: algorithmCode(for: entry.parameters.algorithm))
+            parameters += protoVarint(field: 5, value: entry.parameters.digits == 8 ? 2 : 1)
+            parameters += protoVarint(field: 6, value: 2)   // 2 = TOTP
+
+            payload += protoBytes(field: 1, value: Data(parameters))
+        }
+        payload += protoVarint(field: 2, value: 1)   // version = 1
+
+        let encoded = Data(payload).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "%2B")
+            .replacingOccurrences(of: "/", with: "%2F")
+            .replacingOccurrences(of: "=", with: "%3D")
+        return "otpauth-migration://offline?data=\(encoded)"
+    }
+
+    private static func algorithmCode(for algorithm: OTPParameters.HashAlgorithm) -> Int {
+        switch algorithm {
+        case .sha1: 1
+        case .sha256: 2
+        case .sha512: 3
+        }
+    }
+
+    private static func protoVarint(field: Int, value: Int) -> [UInt8] {
+        var bytes = protoVarintBytes((field << 3) | 0)
+        bytes += protoVarintBytes(value)
+        return bytes
+    }
+
+    private static func protoBytes(field: Int, value: Data) -> [UInt8] {
+        var bytes = protoVarintBytes((field << 3) | 2)
+        bytes += protoVarintBytes(value.count)
+        bytes += [UInt8](value)
+        return bytes
+    }
+
+    private static func protoVarintBytes(_ value: Int) -> [UInt8] {
+        var remaining = UInt64(value)
+        var bytes: [UInt8] = []
+        repeat {
+            var byte = UInt8(remaining & 0b0111_1111)
+            remaining >>= 7
+            if remaining > 0 { byte |= 0b1000_0000 }
+            bytes.append(byte)
+        } while remaining > 0
+        return bytes
+    }
+
     // MARK: - base64（容忍缺失 padding）
 
     private static func base64Data(_ string: String) -> Data? {

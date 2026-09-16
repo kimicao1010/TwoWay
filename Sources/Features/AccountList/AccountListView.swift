@@ -278,7 +278,19 @@ private struct AccountRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
+                // 发行方（PRD FR-03 搜索字段之一；与名称相同则不必重复展示）
+                if let issuer = account.issuer,
+                   !issuer.isEmpty,
+                   issuer != account.displayName {
+                    Text(issuer)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Token.Palette.t3)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .textSelection(.disabled)
+                }
+
                 Text(account.displayName)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Token.Palette.t1)

@@ -24,6 +24,7 @@ final class AppRouter {
     enum BackupSheet: Equatable {
         case export
         case importBackup
+        case exportGAMigration   // C4-4：GA 兼容的迁移码二维码导出
     }
 }
 

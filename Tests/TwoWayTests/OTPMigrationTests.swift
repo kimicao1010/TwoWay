@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import CoreImage
 import Foundation
@@ -158,6 +159,76 @@ struct OTPMigrationTests {
         #expect(accounts.count == 2)
         #expect(skipped == 0)
         #expect(accounts.map(\.displayName) == ["one", "two"])
+    }
+
+    // MARK: 编码（C4-4：导出给 GA 扫描）
+
+    @Test("编码 → 解析往返：账户/发行方/密钥/算法/位数全部还原")
+    func encodeRoundTrip() throws {
+        let entries = [
+            OTPMigration.Entry(
+                displayName: "you@example.com",
+                issuer: "GitHub",
+                secret: Data(repeating: 0x01, count: 20),
+                parameters: OTPParameters.standard
+            ),
+            OTPMigration.Entry(
+                displayName: "ops@dev",
+                issuer: nil,
+                secret: Data(repeating: 0x02, count: 32),
+                parameters: try OTPParameters(algorithm: .sha256, digits: 8, period: 30)
+            ),
+        ]
+
+        let uri = OTPMigration.migrationURI(entries: entries)
+        #expect(uri.hasPrefix("otpauth-migration://offline?data="))
+
+        let parsed = try OTPMigration.parse(uri)
+        #expect(parsed.entries.count == 2)
+        #expect(parsed.skippedHOTPCount == 0)
+
+        let first = try #require(parsed.entries.first)
+        #expect(first.displayName == "you@example.com")
+        #expect(first.issuer == "GitHub")
+        #expect(first.secret == Data(repeating: 0x01, count: 20))
+        #expect(first.parameters.algorithm == .sha1)
+        #expect(first.parameters.digits == 6)
+
+        let second = try #require(parsed.entries.last)
+        #expect(second.displayName == "ops@dev")
+        #expect(second.issuer == nil)
+        #expect(second.parameters.algorithm == .sha256)
+        #expect(second.parameters.digits == 8)
+    }
+
+    @Test("导出的二维码 PNG 可被 Vision 解回（端到端：生成 → 扫描 → 导入）")
+    func generatedQRCodeIsScannable() throws {
+        let entries = [
+            OTPMigration.Entry(
+                displayName: "demo@example.com",
+                issuer: "Demo",
+                secret: Data(repeating: 0x07, count: 20),
+                parameters: OTPParameters.standard
+            ),
+        ]
+        let uri = OTPMigration.migrationURI(entries: entries)
+        let png = try QRCodeImage.pngData(for: uri, scale: 8)
+
+        // PNG magic
+        #expect(png.prefix(8) == Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
+
+        // Vision 解回 → QRImport 判定
+        let image = try #require(
+            NSImage(data: png)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        )
+        let strings = try QRImageDecoder.decode(in: image)
+        guard case .migrated(let accounts, _) = QRImport.resolve(strings) else {
+            Issue.record("期望 .migrated，实际 \(QRImport.resolve(strings))")
+            return
+        }
+        #expect(accounts.count == 1)
+        #expect(accounts.first?.displayName == "demo@example.com")
+        #expect(accounts.first?.issuer == "Demo")
     }
 
     // MARK: 真实二维码往返（Vision）

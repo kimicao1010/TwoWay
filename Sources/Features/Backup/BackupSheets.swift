@@ -56,6 +56,61 @@ struct BackupExportSheet: View {
     }
 }
 
+/// 导出 Google Authenticator 迁移码（C4-4）
+///
+/// GA 只认 `otpauth-migration://` 二维码，所以「给 GA 用」的导出方式是
+/// **生成迁移码二维码 PNG**，由手机 GA「导入账户 → 扫描二维码」读取。
+struct GAMigrationExportSheet: View {
+    let accountCount: Int
+    @Binding var errorMessage: String?
+    var onCancel: () -> Void
+    var onExport: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("导出 Google Authenticator 迁移码")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Token.Palette.t1)
+
+            Text("将 \(accountCount) 个账户导出为一张**迁移码二维码 PNG**，用手机 Google Authenticator 的「导入账户 → 扫描二维码」读取。")
+                .font(.system(size: 12))
+                .foregroundStyle(Token.Palette.t2)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // 安全提示：迁移码载荷是明文（只做 base64），必须明示
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Token.Palette.dangerText)
+                Text("该图片**未加密**：任何人拿到这张图都能导入你的账户。请勿分享或长期留存，导入完成后立即删除。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Token.Palette.dangerText)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Token.Palette.dangerText.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: Token.Metrics.inputRadius))
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(Token.Typography.caption)
+                    .foregroundStyle(Token.Palette.dangerText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 10) {
+                DialogButton(title: "取消", style: .ghost, action: onCancel)
+                DialogButton(title: "导出 PNG…", style: .primary, action: onExport)
+            }
+        }
+        .padding(Token.Metrics.pagePadding)
+        .frame(width: 380)
+    }
+}
+
 /// 从备份导入（C4-3）
 struct BackupImportSheet: View {
     @Binding var errorMessage: String?
