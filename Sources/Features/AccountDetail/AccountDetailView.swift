@@ -17,6 +17,12 @@ struct AccountDetailView: View {
         return formatter
     }()
 
+    /// 下一个整秒边界：让 1Hz 刻度与 TOTP 计数器边界对齐（T5/T6）
+    static func nextSecondBoundary(from date: Date = Date()) -> Date {
+        let fraction = date.timeIntervalSince1970.truncatingRemainder(dividingBy: 1)
+        return date.addingTimeInterval(1 - fraction)
+    }
+
     private var account: Account? { store.selectedAccount }
 
     var body: some View {
@@ -113,29 +119,35 @@ struct AccountDetailView: View {
     // MARK: 验证码主视觉（168 大环 / 描边 5 / 轨道 #3A3F45 / 内嵌 28 码）
 
     private var hero: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-            let timeState = store.timeState(for: account?.id ?? UUID())
-            ZStack {
-                CountdownRing(
-                    progress: timeState?.progress ?? 0,
-                    size: Token.Metrics.ringHeroSize,
-                    strokeWidth: Token.Metrics.ringHeroStroke,
-                    isWarning: timeState?.isWarning ?? false,
-                    heroTrack: true   // 详情大环轨道 #3A3F45（与列表小环不同，勿混）
-                )
+        ZStack {
+            // 环：RingClock 30Hz 直驱 CAShapeLayer（不经 SwiftUI，P-1）
+            CountdownRing(
+                period: account?.parameters.period ?? 30,
+                size: Token.Metrics.ringHeroSize,
+                strokeWidth: Token.Metrics.ringHeroStroke,
+                heroTrack: true   // 详情大环轨道 #3A3F45（与列表小环不同，勿混）
+            )
+            // 码文本 + 秒数：秒对齐 1Hz 刷新（T5/T6）
+            TimelineView(.periodic(from: AccountDetailView.nextSecondBoundary(), by: 1)) { _ in
                 VStack(spacing: 8) {
                     Text(store.displayCode(for: account?.id ?? UUID()) ?? "-- ----")
                         .font(Token.Typography.codeHero)
                         .kerning(1)
                         .foregroundStyle(Token.Palette.code)
                         .monospacedDigit()
-                    Text(timeState.map { "\($0.secondsRemaining) 秒后刷新" } ?? "--")
+                    Text(refreshLabel)
                         .font(.system(size: 11))
                         .foregroundStyle(Token.Palette.t3)
                 }
             }
         }
         .frame(width: Token.Metrics.ringHeroSize, height: Token.Metrics.ringHeroSize)
+    }
+
+    private var refreshLabel: String {
+        guard let account else { return "--" }
+        let state = TOTPTime.state(at: Date(), period: account.parameters.period)
+        return "\(state.secondsRemaining) 秒后刷新"
     }
 
     // MARK: 参数卡（账户类型 / 算法 / 位数 / 周期 / 添加时间）

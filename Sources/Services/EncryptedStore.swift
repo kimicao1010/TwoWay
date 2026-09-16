@@ -146,11 +146,13 @@ final class EncryptedStore: SecretStoring {
         fileData.append(Self.version)
         fileData.append(combined)
 
-        // 原子替换：临时文件（0600）→ rename（replaceItemAt 会沿用临时文件权限）
+        // 原子替换：临时文件（0600）→ rename。
+        // 注意 replaceItemAt 可能沿用目标旧文件的权限，故对**最终路径**再补一次 0600
         let temporaryURL = directory.appendingPathComponent(".wallet.tmp")
         try fileData.write(to: temporaryURL, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporaryURL.path)
         _ = try replaceItem(at: temporaryURL, with: walletURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: walletURL.path)
     }
 
     private func replaceItem(at source: URL, with target: URL) throws -> Bool {

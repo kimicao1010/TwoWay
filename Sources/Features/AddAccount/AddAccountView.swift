@@ -72,6 +72,12 @@ struct AddAccountView: View {
         }
     }
 
+    /// 下一个整秒边界：让 1Hz 刻度与 TOTP 计数器边界对齐（T5/T6）
+    static func nextSecondBoundary(from date: Date = Date()) -> Date {
+        let fraction = date.timeIntervalSince1970.truncatingRemainder(dividingBy: 1)
+        return date.addingTimeInterval(1 - fraction)
+    }
+
     private func handleCancel() {
         model.reset()
         onCancel()
@@ -164,9 +170,9 @@ struct ManualEntryView: View {
 
             advancedCard
 
-            // T3/T5：预览由单一时间源驱动，30Hz 连续刷新；密钥变更即重算
-            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-                PreviewCard(model: model, now: context.date)
+            // 码文本秒对齐 1Hz 刷新；环由 RingClock 30Hz 直驱（P-1，C3-2）
+            TimelineView(.periodic(from: AddAccountView.nextSecondBoundary(), by: 1)) { _ in
+                PreviewCard(model: model)
             }
 
             PrimaryButton(title: "添加账户", action: onSubmit)
@@ -274,7 +280,6 @@ struct ManualEntryView: View {
 
 private struct PreviewCard: View {
     let model: ManualEntryModel
-    let now: Date
 
     var body: some View {
         HStack(spacing: 12) {
@@ -294,10 +299,9 @@ private struct PreviewCard: View {
             Spacer(minLength: 0)
 
             CountdownRing(
-                progress: state?.progress ?? 0,
+                period: model.parameters?.period ?? 30,
                 size: Token.Metrics.ringSmallSize,
-                strokeWidth: Token.Metrics.ringSmallStroke,
-                isWarning: state?.isWarning ?? false
+                strokeWidth: Token.Metrics.ringSmallStroke
             )
         }
         .padding(16)
@@ -310,12 +314,12 @@ private struct PreviewCard: View {
         .clipShape(RoundedRectangle(cornerRadius: Token.Metrics.primaryButtonRadius))
     }
 
-    /// 密钥有效时随时间实时换算；无效则显示占位（E4：不产出错误验证码）
+    /// 密钥有效时按当前时刻换算；无效则显示占位（E4：不产出错误验证码）
     private var state: TOTPTimeState? {
         guard let secret = try? Base32.decode(model.secretRaw), let params = model.parameters else {
             return nil
         }
-        return TOTPTime.state(at: now, period: params.period)
+        return TOTPTime.state(at: Date(), period: params.period)
     }
 
     private var code: String {

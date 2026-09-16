@@ -108,10 +108,10 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | 卡 | 状态 | 内容 | 完成判据 |
 |---|---|---|---|
-| C3-1 | `[ ]` | 逐像素比对（行高/字号/间距/圆角，对照 `index.html`） | 差异项列表 + 处置结论 |
-| C3-2 | `[ ]` | 性能实测（7 环 CPU / RSS / 线程） | 出对比表格，CPU < 1% |
-| C3-3 | `[ ]` | 安全自查（`ps`、日志、落盘）—— D9 后语义：wallet.bin 无明文 / master.key 0600 / 无日志输出 | §4.2 清单全勾（按 D9 修订） |
-| C3-4 | `[ ]` | Release：archive → 全组件重签 → UDZO → 校验 → 挂载实测 | `dist/2way-*.dmg` 可挂载运行 |
+| C3-1 | `[x]` | 逐像素比对（对照 `index.html`）—— 处置结论：**接受等价替代清单**（RK3/RK5/RK8/D8 已闭环）：系统圆角 ≈13 vs 12、交通灯 13pt vs 12px、SF Mono vs JetBrains Mono、PingFang SC vs Noto Sans SC、窗口 732（32pt 归列表区）。U12：Demo 第 02 屏仍是 v1.0 摄像头形态，逐像素比对仅覆盖 01/03/04/05 屏语义 | 差异项已列出并全部有决策 ✅ |
+| C3-2 | `[x]` | 性能实测（M1 Pro，Release，5 环稳态）—— **初测 36% → 优化后 0.4-0.7%**。根因：SwiftUI `TimelineView(.animation)` 30Hz 全列表失效 + AppKit 全窗口 `layoutIfNeeded`（sample 实测主线程 2/3 在布局引擎）。修复：环改 `CAShapeLayer` + `RingClock` 30Hz 直驱 + 周期级 `CABasicAnimation`（GPU 插值）；码文本秒对齐 1Hz。RSS ≈ 92MB / 4 线程 | CPU < 1% ✅ |
+| C3-3 | `[x]` | 安全自查（D9 修订版）—— wallet.bin 密文无明文特征 ✅ / master.key+wallet.bin 0600、目录 0700（含单测）✅ / Sources 零 print·os_log·Logger·NSLog ✅ / 进程参数无密钥 ✅ / Account.debugDescription 脱敏（单测）✅ | ✅（§4.2 清单按 D9 修订后全勾） |
+| C3-4 | `[x]` | Release：archive → 全组件重签 → DR 校验 → UDZO → 校验 → 挂载实测 —— `dist/2way-0.1.0.dmg`（908K），DR = `identifier "com.kimi.2way" and certificate root H"88f7f892…"`，挂载后签名校验通过 | `dist/2way-*.dmg` 可挂载运行 ✅ |
 
 ---
 
@@ -145,6 +145,8 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | **GA 导出迁移码支持（C2-6b，用户实测反馈驱动）**：用户拿 GA「导出二维码」（\`otpauth-migration://offline?data=...\`）被 E10 误拦。新增 \`OTPMigration\` 手写 protobuf wire 解码（secret/name/issuer/algorithm/digits/type，HOTP 跳过并计数知情）；\`QRImport\` 增加 migrated 路径 —— **多账户批量直接入库 + toast「已导入 N 个账户」（含 HOTP 跳过提示），单账户仍走预填确认流**；PRD P1「从其他验证器迁移」的 GA 导出部分提前落地；用用户真实截图端到端验证（5 个 TOTP 全部识别）；测试 114 → 121 全绿 |
 | 2026-09-16 | **C2-7 详情页 + C2-8 删除确认弹窗实现落地**：\`AccountDetailView\`（身份区渐变头像 / 168 大环 heroTrack / 参数卡 / 复制+删除操作区 / 标题栏编辑占位）+ FR-06 删除确认弹窗（遮罩 0.65 / 304 宽 / 文案明示不可恢复 / Esc=取消）；R7/R8 接通（切详情 + 260ms 自动弹窗）；测试 121 全绿 |
 | 2026-09-16 | **D9：弃用 Keychain → EncryptedStore 加密文件（用户决策）**：本机 login 钥匙串条目 ACL 不信任创建者，同构建读取也逐条弹授权框（实测 \`open\`/直接执行均复现），且 \`load()\` 单条失败曾导致全列表消失（已改为单条容错）。新存储：\`wallet.bin\`（AES-256-GCM 认证加密 + 原子替换 + 0600）+ \`master.key\`（随机 32B + 0600，目录 0700）；6 个单测覆盖往返/跨实例持久化/CRUD/篡改检测/主密钥丢失/文件权限；实测零弹窗 + 跨启动持久化 ✅；测试 121 → 127 全绿。**S1 降级已获用户确认**（见 U10） |
+| 2026-09-16 | **C3-2 性能修复（P-1 达成）**：初测 5 环稳态 CPU 36%（SwiftUI 30Hz TimelineView 全列表失效 + AppKit 全窗口布局 churn，sample 定位）。重构：环改 \`RingLayerView\`（CAShapeLayer ×2）+ \`RingClock\` 单一 30Hz 时钟直驱 layer；进度用 CABasicAnimation 按剩余时长 GPU 插值，tick 仅在换周期/告警切换时写 layer；码文本改秒对齐 1Hz \`TimelineView(.periodic)\`。**36% → 0.4-0.7%**，RSS ≈ 92MB，4 线程 |
+| 2026-09-16 | **阶段 3 验收交付完成**：C3-1 差异清单全部有决策（等价替代接受）；C3-3 安全自查按 D9 修订全勾（wallet 密文/0600 权限含单测/零日志/进程参数干净）；C3-4 \`dist/2way-0.1.0.dmg\` 打包 + 挂载实测通过，DR 锚定自签证书 |
 
 ---
 

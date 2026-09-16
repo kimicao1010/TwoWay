@@ -12,7 +12,7 @@ enum RingGeometry {
         return min(1, max(0, progress))
     }
 
-    /// `Circle().trim(from: 0, to:)` 的终止值
+    /// `CAShapeLayer.strokeEnd` 的取值
     static func strokeEnd(for progress: Double) -> Double {
         clamped(progress)
     }
@@ -24,42 +24,216 @@ enum RingGeometry {
     }
 }
 
-/// 倒计时环（PRD §7.1 行末 28/描边 3；§7.5 详情 168/描边 5）
+// MARK: - 单一 30Hz 时钟（TECH_PLAN §4.4 / P-1）
+
+/// 所有环共用一个 30Hz Timer；每帧只做「读 TOTPTime.state → 写 strokeEnd」。
 ///
-/// T3：由上层传入**连续** progress（来自 `TOTPTime.state.progress`），不做整秒跳变。
-/// T4：剩余 ≤ 5s 时 `isWarning = true`，进度 `#F28B82`、轨道 `#3A2B2B`（多行独立判定）。
-///     详情页大环的轨道是 `#3A3F45`，与列表小环不同 —— 用 `heroTrack` 区分。
+/// 性能（C3-2 实测教训）：SwiftUI `TimelineView(.animation)` 30Hz 会让整个行列表
+/// 每帧失效，连带 AppKit 全窗口 `layoutIfNeeded`（sample 实测主线程 2/3 时间在
+/// 布局引擎），5 环 CPU ≈ 36%。改为 CAShapeLayer 直接驱动后，
+/// SwiftUI 每秒只在整秒边界失效一次（验证码文本刷新），环的更新完全绕开 SwiftUI。
+@MainActor
+final class RingClock {
+    static let shared = RingClock()
+
+    private struct WeakBox { weak var view: RingLayerView? }
+
+    private var clients: [WeakBox] = []
+    private var timer: Timer?
+
+    func add(_ view: RingLayerView) {
+        clients.append(WeakBox(view: view))
+        startIfNeeded()
+    }
+
+    func remove(_ view: RingLayerView) {
+        clients.removeAll { $0.view === view }
+        stopIfNeeded()
+    }
+
+    private func startIfNeeded() {
+        guard timer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.tick()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)   // .common：滚动列表时环不冻结
+        self.timer = timer
+    }
+
+    private func stopIfNeeded() {
+        guard clients.contains(where: { $0.view != nil }) else {
+            timer?.invalidate()
+            timer = nil
+            return
+        }
+    }
+
+    private func tick() {
+        clients.removeAll { $0.view == nil }
+        guard !clients.isEmpty else {
+            timer?.invalidate()
+            timer = nil
+            return
+        }
+        for box in clients {
+            box.view?.tick()
+        }
+    }
+}
+
+// MARK: - CALayer 环视图
+
+/// 轨道 + 进度两个 CAShapeLayer；`tick()` 由 `RingClock` 30Hz 驱动。
+/// T4：剩余 ≤5s 各环独立切换告警色；T3：30Hz strokeEnd 连续推进（视觉平滑）。
+final class RingLayerView: NSView {
+
+    var period: TimeInterval = 30
+    var heroTrack = false
+
+    private let trackLayer = CAShapeLayer()
+    private let progressLayer = CAShapeLayer()
+    private var strokeWidth: CGFloat = 3
+    private var isWarning = false
+    private var lastCounter: UInt64?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+
+        for layer in [trackLayer, progressLayer] {
+            layer.fillColor = NSColor.clear.cgColor
+            layer.lineCap = .round
+            self.layer?.addSublayer(layer)
+        }
+        // 起点 12 点钟方向、顺时针（与 Demo stroke-dashoffset 行为一致）
+        let rotation = CATransform3DMakeRotation(-.pi / 2, 0, 0, 1)
+        trackLayer.transform = rotation
+        progressLayer.transform = rotation
+
+        applyColors()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("不支持 IB 初始化")
+    }
+
+    func configure(period: TimeInterval, heroTrack: Bool, strokeWidth: CGFloat) {
+        if self.period != period {
+            self.period = period
+            lastCounter = nil   // 周期变更：下一 tick 重设进度动画
+        }
+        if self.heroTrack != heroTrack {
+            self.heroTrack = heroTrack
+            applyColors()
+        }
+        if self.strokeWidth != strokeWidth {
+            self.strokeWidth = strokeWidth
+            trackLayer.lineWidth = strokeWidth
+            progressLayer.lineWidth = strokeWidth
+            needsLayerGeometryUpdate = true
+            needsLayout = true
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            RingClock.shared.add(self)
+            tick()
+        } else {
+            RingClock.shared.remove(self)
+        }
+    }
+
+    private var needsLayerGeometryUpdate = true
+
+    override func layout() {
+        super.layout()
+        let radius = (min(bounds.width, bounds.height) - strokeWidth) / 2
+        guard radius > 0 else { return }
+        let rect = CGRect(
+            x: bounds.midX - radius,
+            y: bounds.midY - radius,
+            width: radius * 2,
+            height: radius * 2
+        )
+        trackLayer.path = CGPath(ellipseIn: rect, transform: nil)
+        progressLayer.path = trackLayer.path
+        needsLayerGeometryUpdate = false
+        tick()   // 尺寸变化后立即对齐当前进度
+    }
+
+    /// 30Hz 时钟回调：只在**周期切换**时重设动画（否则零 layer 写入）。
+    /// 进度本身由 CABasicAnimation 在渲染服务端插值（p₀ → 0，时长 = 精确剩余秒数），
+    /// CPU 在两次周期之间零工作，且视觉完全连续（T3）。
+    func tick() {
+        guard window != nil else { return }
+        let state = TOTPTime.state(at: Date(), period: period > 0 ? period : 30)
+
+        if state.counter != lastCounter {
+            lastCounter = state.counter
+            let end = CGFloat(RingGeometry.strokeEnd(for: state.progress))
+            progressLayer.removeAnimation(forKey: "progress")
+            progressLayer.strokeEnd = end   // 模型值（动画移除后不跳变）
+            let animation = CABasicAnimation(keyPath: "strokeEnd")
+            animation.fromValue = NSNumber(value: RingGeometry.strokeEnd(for: state.progress))
+            animation.toValue = 0.0
+            animation.duration = state.progress * (period > 0 ? period : 30)   // 精确剩余时长
+            animation.isRemovedOnCompletion = false
+            animation.fillMode = .forwards
+            progressLayer.add(animation, forKey: "progress")
+        }
+
+        if state.isWarning != isWarning {
+            isWarning = state.isWarning
+            applyColors()
+        }
+    }
+
+    private func applyColors() {
+        trackLayer.strokeColor = (isWarning ? Token.Palette.ringTrackWarn : (heroTrack ? Token.Palette.ringTrackHero : Token.Palette.ringTrack)).cgColor
+        progressLayer.strokeColor = (isWarning ? Token.Palette.dangerText : Token.Palette.accent).cgColor
+    }
+}
+
+// MARK: - SwiftUI 接口
+
+/// 倒计时环（PRD §7.1 行末 28/描边 3；§7.4 预览 28；§7.5 详情 168/描边 5）
+///
+/// T3：环内 30Hz 连续推进（RingClock 直驱 layer，非整秒跳变）。
+/// T4：剩余 ≤5s 告警色，多环独立判定。详情大环轨道 `#3A3F45`（heroTrack）。
 struct CountdownRing: View {
-    let progress: Double
+    /// 所属账户的刷新周期 —— 环自行按当前时刻换算进度
+    let period: TimeInterval
     let size: CGFloat
     let strokeWidth: CGFloat
-    var isWarning = false
     /// 详情页大环轨道色不同（PRD §8.1）
     var heroTrack = false
 
-    private var trackColor: Color {
-        if isWarning { return Token.Palette.ringTrackWarn }
-        return heroTrack ? Token.Palette.ringTrackHero : Token.Palette.ringTrack
-    }
-
-    private var fillColor: Color {
-        isWarning ? Token.Palette.dangerText : Token.Palette.accent
-    }
-
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(trackColor, lineWidth: strokeWidth)
-
-            Circle()
-                .trim(from: 0, to: RingGeometry.strokeEnd(for: progress))
-                .stroke(
-                    fillColor,
-                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-        }
+        CountdownRingRepresentable(
+            period: period,
+            heroTrack: heroTrack,
+            strokeWidth: strokeWidth
+        )
         .frame(width: size, height: size)
-        .animation(.linear(duration: 0.033), value: RingGeometry.strokeEnd(for: progress))
+    }
+}
+
+private struct CountdownRingRepresentable: NSViewRepresentable {
+    let period: TimeInterval
+    let heroTrack: Bool
+    let strokeWidth: CGFloat
+
+    func makeNSView(context: Context) -> RingLayerView {
+        let view = RingLayerView()
+        view.configure(period: period, heroTrack: heroTrack, strokeWidth: strokeWidth)
+        return view
+    }
+
+    func updateNSView(_ nsView: RingLayerView, context: Context) {
+        nsView.configure(period: period, heroTrack: heroTrack, strokeWidth: strokeWidth)
     }
 }

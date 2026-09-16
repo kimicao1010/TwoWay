@@ -103,7 +103,7 @@ struct EncryptedStoreTests {
         }
     }
 
-    @Test("文件权限：master.key 0600，目录 0700（最小权限）")
+    @Test("文件权限：master.key / wallet.bin 0600，目录 0700（最小权限）")
     func filePermissions() throws {
         let (store, directory) = try makeStore()
         try store.save(id: UUID(), secret: secret, metadataJSON: metadata)
@@ -112,6 +112,11 @@ struct EncryptedStoreTests {
             atPath: directory.appendingPathComponent("master.key").path
         )
         #expect(keyAttributes[.posixPermissions] as? Int == 0o600)
+
+        let walletAttributes = try FileManager.default.attributesOfItem(
+            atPath: directory.appendingPathComponent("wallet.bin").path
+        )
+        #expect(walletAttributes[.posixPermissions] as? Int == 0o600)
 
         let dirAttributes = try FileManager.default.attributesOfItem(atPath: directory.path)
         #expect(dirAttributes[.posixPermissions] as? Int == 0o700)

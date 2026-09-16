@@ -19,12 +19,11 @@ struct AccountListView: View {
             searchField
                 .padding(.all, Token.Metrics.searchAreaPadding)
 
-            // T3/T5：单一时钟源驱动全部验证码与倒计环，30Hz 已足够平滑（P-1）
-            // 空列表时暂停时钟，避免空转耗 CPU
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: store.filteredAccounts.isEmpty)) { context in
+            // 验证码文本按**秒对齐的 1Hz** 刷新（跨周期即换码，T5/T6 精确对齐）；
+            // 倒计环由 RingClock 30Hz 直驱 CAShapeLayer，不经过 SwiftUI（P-1，C3-2）
+            TimelineView(.periodic(from: Self.nextSecondBoundary(), by: 1)) { _ in
                 AccountRows(
                     store: store,
-                    now: context.date,
                     onCopy: copy,
                     onDetail: onDetail,
                     onDelete: onDelete
@@ -33,6 +32,12 @@ struct AccountListView: View {
 
             footer
         }
+    }
+
+    /// 下一个整秒边界：让 1Hz 刻度与 TOTP 计数器边界对齐
+    static func nextSecondBoundary(from date: Date = Date()) -> Date {
+        let fraction = date.timeIntervalSince1970.truncatingRemainder(dividingBy: 1)
+        return date.addingTimeInterval(1 - fraction)
     }
 
     // MARK: 搜索（FR-03）
@@ -98,7 +103,6 @@ struct AccountListView: View {
 /// 行列表（滚动条隐藏，PRD FR-01 AC）
 private struct AccountRows: View {
     var store: AccountStore
-    let now: Date
     var onCopy: (Account) -> Bool
     var onDetail: (Account) -> Void
     var onDelete: (Account) -> Void
@@ -110,7 +114,6 @@ private struct AccountRows: View {
                     SwipeableAccountRow(
                         account: account,
                         code: store.displayCode(for: account.id),
-                        timeState: store.timeState(for: account.id),
                         isOpen: store.openedRowID == account.id,
                         onTapCopy: { onCopy(account) },
                         onDetail: { onDetail(account) },
@@ -133,7 +136,6 @@ private struct AccountRows: View {
 private struct SwipeableAccountRow: View {
     let account: Account
     let code: String?
-    let timeState: TOTPTimeState?
     let isOpen: Bool
     /// 点按复制，返回是否成功（成功 → 行闪烁 R1）
     var onTapCopy: () -> Bool
@@ -195,7 +197,6 @@ private struct SwipeableAccountRow: View {
         AccountRowView(
             account: account,
             code: code,
-            timeState: timeState,
             isOpen: isOpen,
             onTap: handleTap
         )
@@ -259,7 +260,6 @@ private struct ActionButton: View {
 private struct AccountRowView: View {
     let account: Account
     let code: String?
-    let timeState: TOTPTimeState?
     /// 展开态行底色 = surface（Demo `.acc-row.open`）
     let isOpen: Bool
     /// 返回复制是否成功（R1：成功才闪烁 `#2E3237`）
@@ -309,14 +309,11 @@ private struct AccountRowView: View {
                 .transition(.opacity)
             }
 
-            if let timeState {
-                CountdownRing(
-                    progress: timeState.progress,
-                    size: Token.Metrics.ringSmallSize,
-                    strokeWidth: Token.Metrics.ringSmallStroke,
-                    isWarning: timeState.isWarning
-                )
-            }
+            CountdownRing(
+                period: account.parameters.period,
+                size: Token.Metrics.ringSmallSize,
+                strokeWidth: Token.Metrics.ringSmallStroke
+            )
         }
         .padding(.horizontal, Token.Metrics.rowHPadding)
         .frame(maxWidth: .infinity, minHeight: Token.Metrics.rowHeight)
