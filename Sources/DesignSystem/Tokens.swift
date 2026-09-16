@@ -92,10 +92,12 @@ enum Token {
 
     enum Metrics {
         static let windowWidth: CGFloat = 400
-        /// v1.2 / D8：400×732 —— SwiftUI `.hiddenTitleBar` 保留 32pt 隐形标题栏参与
-        /// 窗口尺寸计算且无法收回（TECH_PLAN §11 RK7），32pt 归列表区
+        /// v1.2 / D8：窗口总高 400×732 = 内容最小 700 + 32pt 隐形标题栏
+        /// （TECH_PLAN §11 RK7：`.hiddenTitleBar` 保留 32pt 参与窗口尺寸计算且无法收回），
+        /// 多出的 32pt 归列表区
         static let windowHeight: CGFloat = 732
-        /// 设计稿原定的内容高度（700），供需要按原稿比例计算的场景引用
+        /// 根视图内容最小高度（700）。SwiftUI 按它 + 32 定窗口尺寸；
+        /// 根视图可向上伸缩，实际由窗口提议的高度决定（列表区吸收 32pt）
         static let designedContentHeight: CGFloat = 700
         static let windowCornerRadius: CGFloat = 12
 

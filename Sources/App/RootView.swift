@@ -29,14 +29,10 @@ struct RootView: View {
                 }
             )
         }
-        .frame(
-            width: Token.Metrics.windowWidth,
-            height: Token.Metrics.windowHeight
-        )
+        .frame(minWidth: Token.Metrics.windowWidth, maxWidth: Token.Metrics.windowWidth)
+        .frame(minHeight: Token.Metrics.designedContentHeight, maxHeight: .infinity)
         .background(Token.Palette.winBg)
         // 窗口底角由我们自绘 12px（G-02）。
-        // SwiftUI 会恒定给窗口加 32pt 隐形标题栏（frame = 内容 + 32），导致
-        // 内容底边落在窗口中部、系统不会在那里画圆角 —— 必须自己裁。
         // 顶角仍由系统裁（≈13px），与 12px 差 1px，肉眼不可辨。
         .clipShape(RoundedRectangle(cornerRadius: Token.Metrics.windowCornerRadius))
         .background(WindowConfigurator())
