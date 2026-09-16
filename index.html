@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MFA 验证器 · macOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --win-bg:#1B1C1E; --titlebar:#1F2124; --divider:#26282C;
+  --surface:#232528; --card:#1F2225; --input:#212326; --seg:#26282C; --seg-active:#43474B;
+  --border:#2E3036; --card-border:#292E30; --win-border:#33363B; --dialog:#24272B; --dialog-border:#36383D;
+  --t1:#E9EBED; --t2:#8A8F94; --t3:#63686D; --t4:#7C8186; --t-title:#C9CDD1;
+  --accent:#8AB4F8; --on-accent:#1B1C1E; --danger:#E5484D; --danger-t:#F28B82; --code:#F2F4F5;
+  --ring-track:#33363A; --ring-track-warn:#3A2B2B;
+  --sans:'Noto Sans SC',-apple-system,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+  --mono:'JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  background:
+    radial-gradient(900px 600px at 50% 30%, #17191D 0%, #0D0E10 70%),
+    #0D0E10;
+  font-family:var(--sans);color:var(--t1);
+  -webkit-font-smoothing:antialiased;
+}
+.stage{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:24px}
+.device-scale{position:relative}
+.window{
+  position:absolute;left:0;top:0;width:400px;height:700px;transform-origin:top left;
+  background:var(--win-bg);border-radius:12px;overflow:hidden;
+  border:1px solid var(--win-border);
+  box-shadow:0 18px 40px -10px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+}
+
+/* ---------- 通用：标题栏 ---------- */
+.titlebar{height:52px;flex:none;display:flex;align-items:center;padding:0 16px;background:var(--titlebar)}
+.lights{display:flex;align-items:center;gap:8px}
+.lights span{width:12px;height:12px;border-radius:50%;transition:filter .15s}
+.lights span:hover{filter:brightness(1.15)}
+.l-close{background:#FF5F57}.l-min{background:#FEBC2E}.l-max{background:#28C840}
+.win-title{flex:1;text-align:center;font-size:13px;font-weight:500;color:var(--t-title);letter-spacing:.2px}
+.tb-right{display:flex;align-items:center;gap:14px;min-width:52px;justify-content:flex-end}
+.tb-right .cancel{font-size:13px;font-weight:500;color:var(--accent);cursor:pointer;background:none;border:0;font-family:inherit;padding:4px 2px}
+.tb-right .cancel:hover{opacity:.8}
+.ic{display:block}
+.divider{height:1px;flex:none;background:var(--divider)}
+
+/* ---------- 屏幕切换 ---------- */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--win-bg);
+  opacity:0;transform:translateX(14px);pointer-events:none;transition:opacity .26s ease,transform .26s ease}
+.screen.active{opacity:1;transform:none;pointer-events:auto}
+
+/* ---------- 01 验证码列表 ---------- */
+.search-wrap{padding:16px;flex:none}
+.search-field{height:36px;display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:9px;padding:0 9px}
+.search-field input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--t1);font-family:var(--sans);font-size:13px}
+.search-field input::placeholder{color:var(--t3)}
+.acc-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px 8px}
+.acc-list::-webkit-scrollbar{width:0}
+.acc-item{position:relative;flex:none;overflow:hidden;border-radius:10px}
+.acc-row{position:relative;z-index:1;height:76px;display:flex;align-items:center;gap:12px;padding:0 12px;
+  background:var(--win-bg);cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;
+  transition:background .15s,transform .3s cubic-bezier(.2,.8,.2,1)}
+.acc-row.dragging{transition:background .15s}
+.acc-row:hover,.acc-row.open{background:var(--surface)}
+.acc-row.copied{background:#2E3237}
+.acc-actions{position:absolute;top:0;bottom:0;right:0;display:flex;align-items:stretch;gap:8px;padding-right:8px}
+.act-btn{width:72px;border:0;border-radius:10px;font-family:var(--sans);font-size:13px;font-weight:500;
+  cursor:pointer;display:flex;align-items:center;justify-content:center}
+.act-detail{background:#2E3237;color:var(--t1)}
+.act-detail:hover{background:#383D42}
+.act-del{background:var(--danger);color:#FFFFFF}
+.act-del:hover{filter:brightness(1.08)}
+.acc-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.acc-name{font-size:15px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.otp-code{font-family:var(--mono);font-size:22px;font-weight:500;letter-spacing:1.5px;color:var(--code);white-space:nowrap}
+.row-copy{flex:none;width:16px;height:16px;opacity:0;transition:opacity .15s;cursor:pointer}
+.acc-row:hover .row-copy{opacity:1}
+.row-copy:hover{opacity:.7 !important}
+.win-footer{height:72px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 20px}
+.acc-count{font-size:12px;color:var(--t3)}
+.btn-add{height:40px;display:flex;align-items:center;gap:7px;padding:0 16px;border:0;border-radius:20px;
+  background:var(--accent);color:var(--on-accent);font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;transition:filter .15s}
+.btn-add:hover{filter:brightness(1.06)}
+
+/* ---------- 倒计时环 ---------- */
+.ring{position:relative;flex:none}
+.ring svg{display:block;transform:rotate(-90deg)}
+.ring .track{fill:none;stroke:var(--ring-track)}
+.ring .fill{fill:none;stroke:var(--accent);transition:stroke .3s}
+.ring.warn .track{stroke:var(--ring-track-warn)}
+.ring.warn .fill{stroke:var(--danger-t)}
+
+/* ---------- 分段控件 ---------- */
+.body-col{flex:1;min-height:0;display:flex;flex-direction:column;padding:20px;gap:16px;overflow-y:auto}
+.body-col::-webkit-scrollbar{width:0}
+.body-col.center{align-items:center}
+.segmented{height:34px;flex:none;display:flex;gap:3px;background:var(--seg);border-radius:9px;padding:3px}
+.seg-item{flex:1;height:28px;display:flex;align-items:center;justify-content:center;border:0;border-radius:7px;
+  background:transparent;color:var(--t2);font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;transition:background .15s,color .15s}
+.seg-item.active{background:var(--seg-active);color:var(--t1)}
+.seg-item:not(.active):hover{color:var(--t1)}
+
+/* ---------- 02 扫描二维码 ---------- */
+.scanner{position:relative;width:360px;height:340px;flex:none;border-radius:14px;overflow:hidden;
+  background:linear-gradient(to bottom,#0F121A,#212433)}
+.qr{position:absolute;left:80px;top:64px;width:200px;height:200px}
+.bracket{position:absolute;width:40px;height:40px}
+.b-tl{left:20px;top:20px}.b-tr{right:20px;top:20px}.b-bl{left:20px;bottom:20px}.b-br{right:20px;bottom:20px}
+.scan-line{position:absolute;left:20px;right:20px;height:2px;border-radius:1px;
+  background:linear-gradient(90deg,rgba(138,180,248,0),rgba(138,180,248,1),rgba(138,180,248,0));
+  box-shadow:0 0 10px rgba(138,180,248,.8);animation:scan 3.4s ease-in-out infinite alternate}
+@keyframes scan{from{top:70px}to{top:264px}}
+.scan-hint{font-size:12px;color:var(--t3);text-align:center;width:100%}
+.btn-secondary{width:360px;height:40px;flex:none;display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--t-title);
+  font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
+.btn-secondary:hover{background:#2A2C30}
+.tip-card{width:360px;flex:none;display:flex;flex-direction:column;gap:8px;padding:14px;
+  background:var(--card);border:1px solid var(--card-border);border-radius:12px}
+.tip-head{display:flex;align-items:center;gap:7px}
+.tip-title{font-size:12px;font-weight:500;color:var(--t-title)}
+.tip-body{font-size:12px;line-height:18px;color:var(--t4)}
+
+/* ---------- 03 手动输入 ---------- */
+.field-group{display:flex;flex-direction:column;gap:6px;width:100%}
+.field-label{font-size:12px;font-weight:500;color:var(--t2)}
+.input{height:42px;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--input);
+  border:1px solid var(--border);border-radius:10px;transition:border-color .15s}
+.input:focus-within{border-color:#4A5568}
+.input input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--t1);font-family:var(--sans);font-size:14px}
+.input input.mono{font-family:var(--mono);font-weight:500;letter-spacing:.5px}
+.input input::placeholder{color:var(--t3)}
+.field-help{font-size:11px;color:var(--t3)}
+.adv-card{width:100%;flex:none;display:flex;flex-direction:column;gap:12px;padding:12px;
+  background:var(--card);border:1px solid var(--card-border);border-radius:12px}
+.adv-head{display:flex;align-items:center;gap:6px}
+.adv-title{font-size:12px;font-weight:500;color:var(--t-title)}
+.adv-rows{display:flex;flex-direction:column;gap:10px;width:100%}
+.adv-row{height:28px;display:flex;align-items:center;gap:6px;cursor:pointer}
+.adv-row .k{flex:1;font-size:13px;color:var(--t2)}
+.adv-row .v{font-size:13px;font-weight:500;color:var(--t1)}
+.preview-card{width:100%;height:76px;flex:none;display:flex;align-items:center;gap:12px;padding:16px;
+  background:var(--card);border:1px solid var(--card-border);border-radius:12px}
+.preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.preview-label{font-size:11px;color:var(--t4)}
+.preview-code{font-family:var(--mono);font-size:20px;font-weight:500;letter-spacing:1.5px;color:var(--code)}
+.btn-primary{width:100%;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border:0;
+  background:var(--accent);color:var(--on-accent);border-radius:12px;font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;transition:filter .15s}
+.btn-primary:hover{filter:brightness(1.06)}
+
+/* ---------- 04 账户详情 ---------- */
+.identity{display:flex;flex-direction:column;align-items:center;gap:12px}
+.avatar{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;
+  background:linear-gradient(225deg,#5787F0,#4761D9);box-shadow:0 6px 16px -2px rgba(87,135,240,.35)}
+.identity .name{font-size:20px;font-weight:600;color:var(--t1)}
+.identity .acct{font-size:13px;color:var(--t2)}
+.hero{position:relative;width:168px;height:168px;flex:none}
+.hero .ring-wrap{position:absolute;inset:0}
+.hero .code{position:absolute;left:0;top:58px;width:168px;text-align:center;
+  font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:1px;color:var(--code)}
+.hero .meta{position:absolute;left:0;top:96px;width:168px;text-align:center;font-size:11px;color:var(--t3)}
+.hero .ring .track{stroke:#3A3F45}
+.meta-card{width:100%;flex:none;display:flex;flex-direction:column;gap:12px;padding:16px;
+  background:var(--card);border:1px solid var(--card-border);border-radius:12px}
+.meta-row{height:20px;display:flex;align-items:center;gap:6px}
+.meta-row .k{flex:1;font-size:13px;color:var(--t2)}
+.meta-row .v{font-size:13px;font-weight:500;color:var(--t1)}
+.actions{width:100%;height:44px;flex:none;display:flex;align-items:center;gap:10px}
+.btn-copy{flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:0;border-radius:12px;
+  background:var(--accent);color:var(--on-accent);font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;transition:filter .15s}
+.btn-copy:hover{filter:brightness(1.06)}
+.btn-del{width:100px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:12px;
+  background:transparent;border:1px solid rgba(242,140,130,.35);color:var(--danger-t);
+  font-family:var(--sans);font-size:15px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
+.btn-del:hover{background:rgba(242,140,130,.1);border-color:rgba(242,140,130,.6)}
+
+/* ---------- 05 删除确认 ---------- */
+.delete-overlay{position:absolute;inset:0;z-index:30;opacity:0;pointer-events:none;transition:opacity .22s ease}
+.delete-overlay.open{opacity:1;pointer-events:auto}
+.scrim{position:absolute;inset:0;background:rgba(13,13,15,.65)}
+.dialog{position:absolute;left:48px;top:263px;width:304px;display:flex;flex-direction:column;gap:16px;padding:20px;
+  background:var(--dialog);border:1px solid var(--dialog-border);border-radius:16px;
+  box-shadow:0 16px 40px -6px rgba(0,0,0,.5);transform:translateY(10px) scale(.98);transition:transform .22s ease}
+.delete-overlay.open .dialog{transform:none}
+.dialog-title{font-size:16px;font-weight:600;color:var(--t1)}
+.dialog-body{font-size:13px;line-height:20px;color:var(--t2)}
+.dialog-actions{display:flex;gap:10px}
+.btn-ghost{flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;
+  background:#2E3237;color:var(--t1);font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;transition:background .15s}
+.btn-ghost:hover{background:#383D42}
+.btn-danger{flex:1;height:40px;display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;
+  background:var(--danger);color:#FFFFFF;font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;transition:filter .15s}
+.btn-danger:hover{filter:brightness(1.08)}
+
+/* ---------- 原型导航 & Toast ---------- */
+.proto-nav{display:flex;gap:8px}
+.proto-nav button{background:#1B1D21;border:1px solid #26292D;color:var(--t2);border-radius:8px;
+  padding:7px 14px;font-size:12px;font-family:var(--sans);cursor:pointer;transition:all .18s}
+.proto-nav button:hover{color:var(--t1)}
+.proto-nav button.active{background:#2E3237;border-color:#3A3F45;color:var(--t1)}
+.proto-hint{font-size:11px;color:#5A5F64}
+.toast{position:fixed;left:50%;bottom:44px;transform:translateX(-50%) translateY(12px);z-index:100;
+  background:#2E3237;border:1px solid #3A3F45;color:var(--t1);border-radius:10px;padding:10px 18px;
+  font-size:13px;box-shadow:0 10px 30px -6px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="device-scale" id="scaler">
+    <div class="window" id="window">
+
+      <!-- ===== 01 验证码列表 ===== -->
+      <section class="screen active" data-screen="list">
+        <div class="titlebar">
+          <div class="lights"><span class="l-close"></span><span class="l-min"></span><span class="l-max"></span></div>
+          <div class="win-title">验证器</div>
+          <div class="tb-right">
+            <svg class="ic" width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="4" cy="9" r="1.6" fill="#8A8F94"/><circle cx="9" cy="9" r="1.6" fill="#8A8F94"/><circle cx="14" cy="9" r="1.6" fill="#8A8F94"/></svg>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="search-wrap">
+          <div class="search-field">
+            <svg class="ic" width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="#6E7378" stroke-width="1.5"/><path d="M10 10L13 13" stroke="#6E7378" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <input id="searchInput" type="text" placeholder="搜索账户或发行方" autocomplete="off">
+          </div>
+        </div>
+        <div class="acc-list" id="accList"></div>
+        <div class="win-footer">
+          <div class="acc-count" id="accCount">共 6 个账户</div>
+          <button class="btn-add" data-nav="scan">
+            <svg class="ic" width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 2.5v10M2.5 7.5h10" stroke="#1B1C1E" stroke-width="1.8" stroke-linecap="round"/></svg>
+            添加账户
+          </button>
+        </div>
+      </section>
+
+      <!-- ===== 02 添加账户 · 扫描二维码 ===== -->
+      <section class="screen" data-screen="scan">
+        <div class="titlebar">
+          <div class="lights"><span class="l-close"></span><span class="l-min"></span><span class="l-max"></span></div>
+          <div class="win-title">添加账户</div>
+          <div class="tb-right"><button class="cancel" data-nav="list">取消</button></div>
+        </div>
+        <div class="divider"></div>
+        <div class="body-col">
+          <div class="segmented">
+            <button class="seg-item active" data-seg="scan">扫描二维码</button>
+            <button class="seg-item" data-seg="manual">手动输入</button>
+          </div>
+          <div class="scanner">
+            <svg class="qr" viewBox="0 0 200 200" fill="none"><rect x="4" y="4" width="48" height="48" stroke="#E9EBED" stroke-width="8"/><rect x="16" y="16" width="24" height="24" fill="#E9EBED"/><rect x="148" y="4" width="48" height="48" stroke="#E9EBED" stroke-width="8"/><rect x="160" y="16" width="24" height="24" fill="#E9EBED"/><rect x="4" y="148" width="48" height="48" stroke="#E9EBED" stroke-width="8"/><rect x="16" y="160" width="24" height="24" fill="#E9EBED"/><path fill="#E9EBED" d="M64 0h8v8h-8zM80 0h8v8h-8zM96 0h8v8h-8zM112 0h8v8h-8zM128 0h8v8h-8zM64 8h8v8h-8zM88 8h8v8h-8zM104 8h8v8h-8zM128 8h8v8h-8zM72 16h8v8h-8zM96 16h8v8h-8zM120 16h8v8h-8zM136 16h8v8h-8zM64 24h8v8h-8zM88 24h8v8h-8zM112 24h8v8h-8zM128 24h8v8h-8zM72 32h8v8h-8zM96 32h8v8h-8zM120 32h8v8h-8zM64 40h8v8h-8zM80 40h8v8h-8zM104 40h8v8h-8zM128 40h8v8h-8zM136 40h8v8h-8zM64 48h8v8h-8zM80 48h8v8h-8zM96 48h8v8h-8zM112 48h8v8h-8zM128 48h8v8h-8zM72 56h8v8h-8zM88 56h8v8h-8zM112 56h8v8h-8zM136 56h8v8h-8zM0 64h8v8h-8zM24 64h8v8h-8zM48 64h8v8h-8zM88 64h8v8h-8zM112 64h8v8h-8zM136 64h8v8h-8zM160 64h8v8h-8zM184 64h8v8h-8zM16 72h8v8h-8zM40 72h8v8h-8zM64 72h8v8h-8zM96 72h8v8h-8zM120 72h8v8h-8zM152 72h8v8h-8zM176 72h8v8h-8zM0 80h8v8h-8zM32 80h8v8h-8zM56 80h8v8h-8zM80 80h8v8h-8zM104 80h8v8h-8zM128 80h8v8h-8zM160 80h8v8h-8zM192 80h8v8h-8zM16 88h8v8h-8zM48 88h8v8h-8zM72 88h8v8h-8zM96 88h8v8h-8zM120 88h8v8h-8zM144 88h8v8h-8zM168 88h8v8h-8zM0 96h8v8h-8zM24 96h8v8h-8zM56 96h8v8h-8zM88 96h8v8h-8zM112 96h8v8h-8zM136 96h8v8h-8zM160 96h8v8h-8zM184 96h8v8h-8zM16 104h8v8h-8zM40 104h8v8h-8zM64 104h8v8h-8zM96 104h8v8h-8zM120 104h8v8h-8zM152 104h8v8h-8zM176 104h8v8h-8zM0 112h8v8h-8zM32 112h8v8h-8zM56 112h8v8h-8zM80 112h8v8h-8zM104 112h8v8h-8zM128 112h8v8h-8zM160 112h8v8h-8zM192 112h8v8h-8zM16 120h8v8h-8zM48 120h8v8h-8zM72 120h8v8h-8zM96 120h8v8h-8zM120 120h8v8h-8zM144 120h8v8h-8zM168 120h8v8h-8zM24 128h8v8h-8zM56 128h8v8h-8zM88 128h8v8h-8zM112 128h8v8h-8zM136 128h8v8h-8zM160 128h8v8h-8zM184 128h8v8h-8zM0 136h8v8h-8zM64 136h8v8h-8zM96 136h8v8h-8zM128 136h8v8h-8zM160 136h8v8h-8zM192 136h8v8h-8zM64 144h8v8h-8zM88 144h8v8h-8zM112 144h8v8h-8zM136 144h8v8h-8zM160 144h8v8h-8zM184 144h8v8h-8zM72 152h8v8h-8zM96 152h8v8h-8zM120 152h8v8h-8zM152 152h8v8h-8zM176 152h8v8h-8zM64 160h8v8h-8zM80 160h8v8h-8zM104 160h8v8h-8zM128 160h8v8h-8zM160 160h8v8h-8zM192 160h8v8h-8zM88 168h8v8h-8zM112 168h8v8h-8zM144 168h8v8h-8zM168 168h8v8h-8zM64 176h8v8h-8zM96 176h8v8h-8zM120 176h8v8h-8zM152 176h8v8h-8zM184 176h8v8h-8zM80 184h8v8h-8zM104 184h8v8h-8zM136 184h8v8h-8zM160 184h8v8h-8zM192 184h8v8h-8zM64 192h8v8h-8zM88 192h8v8h-8zM112 192h8v8h-8zM136 192h8v8h-8zM168 192h8v8h-8z"/></svg>
+            <svg class="bracket b-tl" viewBox="0 0 40 40" fill="none"><path d="M1.5 38.5V1.5H38.5" stroke="#8AB4F8" stroke-width="3" stroke-linecap="round"/></svg>
+            <svg class="bracket b-tr" viewBox="0 0 40 40" fill="none"><path d="M1.5 1.5h37v37" stroke="#8AB4F8" stroke-width="3" stroke-linecap="round"/></svg>
+            <svg class="bracket b-bl" viewBox="0 0 40 40" fill="none"><path d="M1.5 1.5v37h37" stroke="#8AB4F8" stroke-width="3" stroke-linecap="round"/></svg>
+            <svg class="bracket b-br" viewBox="0 0 40 40" fill="none"><path d="M38.5 1.5v37h-37" stroke="#8AB4F8" stroke-width="3" stroke-linecap="round"/></svg>
+            <div class="scan-line"></div>
+          </div>
+          <div class="scan-hint">将二维码对准取景框，识别成功后自动填入账户信息</div>
+          <button class="btn-secondary" id="importBtn">
+            <svg class="ic" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="2.5" stroke="#C9CDD1" stroke-width="1.3"/><circle cx="5.4" cy="6.4" r="1.2" stroke="#C9CDD1" stroke-width="1.1"/><path d="M2 11.4l3.1-2.5a1.5 1.5 0 0 1 1.9 0l3.9 3.6" stroke="#C9CDD1" stroke-width="1.3" stroke-linecap="round"/></svg>
+            从图片文件导入二维码
+          </button>
+          <div class="tip-card">
+            <div class="tip-head">
+              <svg class="ic" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#8AB4F8" stroke-width="1.3"/><path d="M8 7.3v4" stroke="#8AB4F8" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.9" fill="#8AB4F8"/></svg>
+              <div class="tip-title">在哪里找到二维码？</div>
+            </div>
+            <div class="tip-body">以 GitHub 为例：Settings → Password and authentication → Two-factor authentication → Set up authenticator app，页面中的二维码即为此处所需。</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 03 添加账户 · 手动输入 ===== -->
+      <section class="screen" data-screen="manual">
+        <div class="titlebar">
+          <div class="lights"><span class="l-close"></span><span class="l-min"></span><span class="l-max"></span></div>
+          <div class="win-title">添加账户</div>
+          <div class="tb-right"><button class="cancel" data-nav="list">取消</button></div>
+        </div>
+        <div class="divider"></div>
+        <div class="body-col">
+          <div class="segmented">
+            <button class="seg-item" data-seg="scan">扫描二维码</button>
+            <button class="seg-item active" data-seg="manual">手动输入</button>
+          </div>
+          <div class="field-group">
+            <div class="field-label">账户名称</div>
+            <div class="input"><input id="nameInput" type="text" placeholder="例如：you@example.com" autocomplete="off"></div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">密钥</div>
+            <div class="input">
+              <input id="keyInput" class="mono" type="text" value="JBSWY3DPEHPK3PXP" autocomplete="off" spellcheck="false">
+              <svg class="ic" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="5.8" cy="6.2" r="3.3" stroke="#7C8186" stroke-width="1.3"/><path d="M8.1 8.5l5 5" stroke="#7C8186" stroke-width="1.3" stroke-linecap="round"/><path d="M10.3 10.7l1.3-1.3M12 12.4l1.3-1.3" stroke="#7C8186" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </div>
+            <div class="field-help">服务商提供的 Base32 密钥，空格与连字符会自动忽略</div>
+          </div>
+          <div class="adv-card">
+            <div class="adv-head">
+              <svg class="ic" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 5.5L7 9l3.5-3.5" stroke="#7C8186" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div class="adv-title">高级选项</div>
+            </div>
+            <div class="adv-rows">
+              <div class="adv-row"><div class="k">算法</div><div class="v">SHA-1</div><svg class="ic" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 5.5L7 9l3.5-3.5" stroke="#7C8186" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="adv-row"><div class="k">位数</div><div class="v">6 位</div><svg class="ic" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 5.5L7 9l3.5-3.5" stroke="#7C8186" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="adv-row"><div class="k">刷新周期</div><div class="v">30 秒</div><svg class="ic" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 5.5L7 9l3.5-3.5" stroke="#7C8186" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </div>
+          </div>
+          <div class="preview-card">
+            <div class="preview-info">
+              <div class="preview-label" id="previewLabel">实时预览 · 剩余 22 秒</div>
+              <div class="preview-code" id="previewCode">741 052</div>
+            </div>
+            <div class="ring" data-r="11" data-stroke="3" data-size="28" id="previewRing"></div>
+          </div>
+          <button class="btn-primary" id="addAccountBtn">添加账户</button>
+        </div>
+      </section>
+
+      <!-- ===== 04 账户详情 ===== -->
+      <section class="screen" data-screen="detail">
+        <div class="titlebar">
+          <div class="lights"><span class="l-close"></span><span class="l-min"></span><span class="l-max"></span></div>
+          <div class="win-title">账户详情</div>
+          <div class="tb-right">
+            <svg class="ic" id="editBtn" width="18" height="18" viewBox="0 0 18 18" fill="none" style="cursor:pointer"><path d="M2.5 15.5l.8-3.6 8.1-8.1a1.5 1.5 0 0 1 2.1 0l.7.7a1.5 1.5 0 0 1 0 2.1l-8.1 8.1-3.6.8z" stroke="#8A8F94" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.6 4.6l2.8 2.8" stroke="#8A8F94" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg class="ic" id="delBtn" width="18" height="18" viewBox="0 0 18 18" fill="none" style="cursor:pointer"><path d="M3 5h12M7 5V3.5h4V5M5 5l.7 9.2a1.5 1.5 0 0 0 1.5 1.4h3.6a1.5 1.5 0 0 0 1.5-1.4L13 5" stroke="#F28B82" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="body-col center">
+          <div class="identity">
+            <div class="avatar">
+              <svg class="ic" width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 3l8.5 3.2v6.4c0 5.3-3.5 9.6-8.5 11.4-5-1.8-8.5-6.1-8.5-11.4V6.2L14 3z" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round"/><path d="M10.5 13.8l2.6 2.6 4.6-4.8" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="name" id="dName">GitHub</div>
+            <div class="acct" id="dAcct">you@example.com</div>
+          </div>
+          <div class="hero">
+            <div class="ring-wrap ring" data-r="76" data-stroke="5" data-size="168" id="heroRing"></div>
+            <div class="code" id="dCode">123 456</div>
+            <div class="meta" id="dMeta">22 秒后刷新</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-row"><div class="k">账户类型</div><div class="v">基于时间（TOTP）</div></div>
+            <div class="meta-row"><div class="k">哈希算法</div><div class="v">SHA-1</div></div>
+            <div class="meta-row"><div class="k">验证码位数</div><div class="v">6 位</div></div>
+            <div class="meta-row"><div class="k">刷新周期</div><div class="v">30 秒</div></div>
+            <div class="meta-row"><div class="k">添加时间</div><div class="v" id="dAdded">2026-08-14 10:24</div></div>
+          </div>
+          <div class="actions">
+            <button class="btn-copy" id="copyBtn">复制验证码</button>
+            <button class="btn-del" id="delBtn2">删除</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 05 删除确认弹窗 ===== -->
+      <div class="delete-overlay" id="deleteOverlay">
+        <div class="scrim"></div>
+        <div class="dialog">
+          <div class="dialog-title">删除此账户？</div>
+          <div class="dialog-body">删除后需要重新扫描二维码或输入密钥才能恢复，该账户的验证码将立即失效。</div>
+          <div class="dialog-actions">
+            <button class="btn-ghost" id="cancelDel">取消</button>
+            <button class="btn-danger" id="confirmDel">删除</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <nav class="proto-nav" id="protoNav">
+    <button data-go="list">01 列表</button>
+    <button data-go="scan">02 扫码</button>
+    <button data-go="manual">03 手动</button>
+    <button data-go="detail">04 详情</button>
+    <button data-go="delete">05 删除</button>
+  </nav>
+  <div class="proto-hint">← / → 切换画面 · Esc 返回列表</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= 数据 ================= */
+const accounts = [
+  { id:'github',  name:'GitHub',        acct:'you@example.com',   secret:'JBSWY3DPEHPK3PXP',          added:'2026-08-14 10:24' },
+  { id:'google',  name:'Google',        acct:'alex@example.com', secret:'GEZDGNBVGY3TQOJQGEZDGNBVGY', added:'2026-07-02 18:03' },
+  { id:'aws',     name:'AWS 控制台',    acct:'ops@company.com',    secret:'MFRGGZDFMZTWQ2LK',           added:'2026-06-18 09:41' },
+  { id:'tencent', name:'腾讯云',        acct:'100029384756',       secret:'NBSWY3DPFQQFO33SNRSCC',      added:'2026-05-30 21:12' },
+  { id:'notion',  name:'Notion 工作区', acct:'kimi@company.com',   secret:'KRSXG5CTMVRXEZLU',           added:'2026-04-11 14:57' },
+  { id:'gitlab',  name:'GitLab',        acct:'kimi@gitlab.company',secret:'ONSWG4TFOQQGS4ZA',           added:'2026-03-25 11:08' }
+];
+let current = accounts[0];
+let screen  = 'list';
+const PERIOD = 30;
+
+/* ================= 工具 ================= */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const fmt = c => c.replace(/(\d{3})(\d{3})/, '$1 $2');
+
+function b32decode(str){
+  const A='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  str=str.toUpperCase().replace(/[=\s-]/g,'');
+  let bits=0,val=0; const out=[];
+  for(const c of str){ const i=A.indexOf(c); if(i<0) continue; val=(val<<5)|i; bits+=5;
+    if(bits>=8){ out.push((val>>>(bits-8))&0xff); bits-=8; } }
+  return new Uint8Array(out);
+}
+async function totp(secret, counter){
+  const key=b32decode(secret), digits=6;
+  const buf=new ArrayBuffer(8), dv=new DataView(buf);
+  dv.setUint32(0, Math.floor(counter/4294967296));
+  dv.setUint32(4, counter>>>0);
+  try{
+    if(window.crypto && crypto.subtle){
+      const ck=await crypto.subtle.importKey('raw',key,{name:'HMAC',hash:'SHA-1'},false,['sign']);
+      const sig=new Uint8Array(await crypto.subtle.sign('HMAC',ck,buf));
+      const o=sig[sig.length-1]&0x0f;
+      const bin=((sig[o]&0x7f)<<24)|(sig[o+1]<<16)|(sig[o+2]<<8)|sig[o+3];
+      return (bin%10**digits).toString().padStart(digits,'0');
+    }
+  }catch(e){}
+  let h=counter>>>0; for(const b of key) h=(h*31+b)>>>0;
+  return (h%10**digits).toString().padStart(digits,'0');
+}
+
+/* ================= 倒计时环 ================= */
+function buildRing(el){
+  const r=+el.dataset.r, st=+el.dataset.stroke, size=+el.dataset.size;
+  const c=size/2, C=(2*Math.PI*r).toFixed(2);
+  el.innerHTML =
+    `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" fill="none">
+       <circle class="track" cx="${c}" cy="${c}" r="${r}" stroke-width="${st}"/>
+       <circle class="fill"  cx="${c}" cy="${c}" r="${r}" stroke-width="${st}" stroke-linecap="round"
+               stroke-dasharray="${C}" stroke-dashoffset="0"/>
+     </svg>`;
+  el._C=+C;
+}
+function setRing(el, progress, warn){
+  el.querySelector('.fill').style.strokeDashoffset = (el._C*(1-progress)).toFixed(2);
+  el.classList.toggle('warn', !!warn);
+}
+
+/* ================= 渲染列表 ================= */
+const copySvg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="2" stroke="#8AB4F8" stroke-width="1.4"/><path d="M10.5 5.5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v4.5a2 2 0 0 0 2 2h1.5" stroke="#8AB4F8" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
+const SWIPE_MAX = 160;
+function renderList(){
+  const q = ($('#searchInput').value||'').trim().toLowerCase();
+  const list = $('#accList'); list.innerHTML='';
+  accounts.filter(a => !q || a.name.toLowerCase().includes(q) || a.acct.toLowerCase().includes(q))
+    .forEach(a=>{
+      const item=document.createElement('div'); item.className='acc-item';
+      item.innerHTML =
+        `<div class="acc-actions">
+           <button class="act-btn act-detail">详情</button>
+           <button class="act-btn act-del">删除</button>
+         </div>
+         <div class="acc-row" data-id="${a.id}">
+           <div class="acc-info"><div class="acc-name">${a.name}</div><div class="otp-code" data-code>-- ----</div></div>
+           <div class="row-copy" title="复制验证码">${copySvg}</div>
+           <div class="ring" data-r="11" data-stroke="3" data-size="28"></div>
+         </div>`;
+      const row = item.querySelector('.acc-row');
+      attachSwipe(row, a);
+      row.querySelector('.row-copy').addEventListener('click', e=>{ e.stopPropagation(); copyCode(a); });
+      item.querySelector('.act-detail').addEventListener('click', ()=>{ current=a; renderDetail(); openScreen('detail'); });
+      item.querySelector('.act-del').addEventListener('click', ()=>{ current=a; renderDetail(); openScreen('delete'); });
+      list.appendChild(item);
+    });
+  $('#accCount').textContent = `共 ${accounts.length} 个账户`;
+  $$('.acc-list .ring').forEach(buildRing);
+  tick(true);
+}
+
+/* 左滑呼出 详情 | 删除；点按行 = 复制验证码 */
+function attachSwipe(row, a){
+  const MAX = SWIPE_MAX;
+  let sx=0, sy=0, dx=0, dragging=false, moved=false, isOpen=false, suppress=false;
+  const setX = (x, animate) => {
+    row.classList.toggle('dragging', !animate);
+    row.style.transform = x ? `translateX(${x}px)` : '';
+  };
+  const close = () => { isOpen=false; setX(0,true); row.classList.remove('open'); };
+  row.addEventListener('pointerdown', e=>{
+    if(e.pointerType==='mouse' && e.button!==0) return;
+    sx=e.clientX; sy=e.clientY; dx=0; moved=false; dragging=true;
+    $$('.acc-row.open').forEach(r=>{ if(r!==row){ r.classList.remove('open'); r.style.transform=''; }});
+    try{ row.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  row.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    dx = e.clientX - sx;
+    if(!moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - sy)) moved = true;
+    if(!moved) return;
+    setX(Math.max(-MAX, Math.min(0, (isOpen ? -MAX : 0) + dx)), false);
+  });
+  const finish = ()=>{
+    if(!dragging) return;
+    dragging=false;
+    if(!moved){ if(isOpen) close(); return; }
+    suppress = true;
+    const x = (isOpen ? -MAX : 0) + dx;
+    if(x < -MAX*0.45){ isOpen=true; setX(-MAX,true); row.classList.add('open'); }
+    else close();
+  };
+  row.addEventListener('pointerup', finish);
+  row.addEventListener('pointercancel', finish);
+  row.addEventListener('click', ()=>{
+    if(suppress){ suppress=false; return; }
+    if(isOpen){ close(); return; }
+    copyCode(a);
+  });
+}
+function closeAllRows(){
+  $$('.acc-row.open').forEach(r=>{ r.classList.remove('open'); r.style.transform=''; });
+}
+
+/* ================= 详情 ================= */
+function renderDetail(){
+  if(!current) return;
+  $('#dName').textContent = current.name;
+  $('#dAcct').textContent = current.acct;
+  $('#dAdded').textContent = current.added;
+}
+
+/* ================= 屏幕切换 ================= */
+const ORDER = ['list','scan','manual','detail','delete'];
+let navName = 'list';
+function openScreen(name){
+  navName = name;
+  if(name==='delete'){ name='detail'; setTimeout(()=>$('#deleteOverlay').classList.add('open'),260); }
+  screen = name;
+  $$('.screen').forEach(s=>s.classList.toggle('active', s.dataset.screen===name));
+  if(name!=='list') closeAllRows();
+  if(name!=='detail') $('#deleteOverlay').classList.remove('open');
+  $$('#protoNav button').forEach(b=>{
+    const g=b.dataset.go;
+    b.classList.toggle('active', g===navName || (g==='detail'&&navName==='delete'));
+  });
+}
+$$('[data-nav]').forEach(el=>el.addEventListener('click', ()=>openScreen(el.dataset.nav)));
+$$('[data-seg]').forEach(el=>el.addEventListener('click', ()=>openScreen(el.dataset.seg)));
+$$('#protoNav button').forEach(b=>b.addEventListener('click', ()=>openScreen(b.dataset.go)));
+$('#delBtn').addEventListener('click', ()=>$('#deleteOverlay').classList.add('open'));
+$('#delBtn2').addEventListener('click', ()=>$('#deleteOverlay').classList.add('open'));
+$('#cancelDel').addEventListener('click', ()=>$('#deleteOverlay').classList.remove('open'));
+$('#confirmDel').addEventListener('click', ()=>{
+  const n = current ? current.name : '';
+  const i = accounts.indexOf(current);
+  if(i>=0) accounts.splice(i,1);
+  current = accounts[0] || null;
+  $('#deleteOverlay').classList.remove('open');
+  renderList(); openScreen('list');
+  toast(`已删除「${n}」`);
+});
+$('#editBtn').addEventListener('click', ()=>toast('编辑功能开发中'));
+$('#importBtn').addEventListener('click', ()=>toast('已打开文件选择器（原型演示）'));
+$('#addAccountBtn').addEventListener('click', ()=>{
+  const name = $('#nameInput').value.trim() || '新账户';
+  const key  = ($('#keyInput').value||'').replace(/[\s-]/g,'').toUpperCase() || 'JBSWY3DPEHPK3PXP';
+  const now  = new Date();
+  const pad  = n => String(n).padStart(2,'0');
+  accounts.unshift({ id:'a'+Date.now(), name, acct:'手动输入', secret:key,
+    added:`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}` });
+  $('#nameInput').value='';
+  renderList(); openScreen('list');
+  toast(`已添加「${name}」`);
+});
+$('#searchInput').addEventListener('input', renderList);
+
+/* ================= 复制 & Toast ================= */
+let toastTimer;
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1800);
+}
+function legacyCopy(txt){
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=txt; ta.setAttribute('readonly','');
+    ta.style.position='fixed'; ta.style.top='-1000px'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok = typeof document.execCommand === 'function' && document.execCommand('copy');
+    ta.remove();
+    return ok ? Promise.resolve() : Promise.reject(new Error('copy-failed'));
+  }catch(e){ return Promise.reject(e); }
+}
+function copyText(txt){
+  if(navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext){
+    return navigator.clipboard.writeText(txt).catch(()=>legacyCopy(txt));
+  }
+  return legacyCopy(txt);
+}
+function copyCode(a){
+  const row = document.querySelector(`.acc-row[data-id="${a.id}"]`);
+  const el = row && row.querySelector('.otp-code');
+  const code = (el && el.dataset.code && el.dataset.code !== '-- ----') ? el.dataset.code : (a._code || '');
+  copyText(String(code).replace(/\s/g,'')).then(()=>{
+    toast('验证码已复制');
+    if(row){ row.classList.add('copied'); setTimeout(()=>row.classList.remove('copied'), 650); }
+  }).catch(()=>toast('复制失败，请手动复制'));
+}
+$('#copyBtn').addEventListener('click', ()=>{
+  const el=document.querySelector('.acc-row .otp-code');
+  const a = current || accounts[0];
+  const row = document.querySelector(`.acc-row[data-id="${a.id}"] .otp-code`);
+  copyText((row?row.dataset.code:'').replace(/\s/g,'')).then(()=>toast('验证码已复制'));
+});
+
+/* ================= 键盘 ================= */
+document.addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT'){ if(e.key==='Escape') e.target.blur(); return; }
+  if(e.key==='Escape'){ $('#deleteOverlay').classList.remove('open'); openScreen('list'); return; }
+  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){
+    let i = ORDER.indexOf(screen==='detail' && $('#deleteOverlay').classList.contains('open') ? 'detail-delete' : screen);
+    i = (i + (e.key==='ArrowRight'?1:-1) + ORDER.length) % ORDER.length;
+    openScreen(ORDER[i]);
+  }
+});
+
+/* ================= 主时钟 ================= */
+let lastCounter = -1;
+function tick(force){
+  const now = Date.now()/1000;
+  const counter = Math.floor(now/PERIOD);
+  const remaining = PERIOD - (now % PERIOD);
+  const progress = remaining/PERIOD;
+  const warn = remaining <= 5;
+
+  const update = (counter !== lastCounter) || force;
+  if(update){
+    accounts.forEach(a=>{
+      totp(a.secret, counter).then(code=>{
+        a._code = code;
+        const el = document.querySelector(`.acc-row[data-id="${a.id}"] .otp-code`);
+        if(el){ el.dataset.code = code; el.textContent = fmt(code); }
+      });
+    });
+    totp('JBSWY3DPEHPK3PXP', counter).then(code=>{
+      $('#previewCode').textContent = fmt(code);
+      $('#dCode').textContent = current && current.secret==='JBSWY3DPEHPK3PXP' ? fmt(code) : $('#dCode').textContent;
+    });
+    lastCounter = counter;
+  }
+  if(current && current._code) $('#dCode').textContent = fmt(current._code);
+  $('#dMeta').textContent = `${Math.ceil(remaining)} 秒后刷新`;
+  $('#previewLabel').textContent = `实时预览 · 剩余 ${Math.ceil(remaining)} 秒`;
+
+  $$('.acc-list .ring').forEach(r=>{
+    const id = r.closest('.acc-row').dataset.id;
+    const a = accounts.find(x=>x.id===id);
+    if(a) setRing(r, progress, warn);
+  });
+  const hr = $('#heroRing'); if(hr) setRing(hr, progress, warn);
+  const pr = $('#previewRing'); if(pr) setRing(pr, progress, warn);
+}
+requestAnimationFrame(function loop(){ tick(); requestAnimationFrame(loop); });
+
+/* ================= 等比缩放 ================= */
+function fit(){
+  const s = Math.max(0.32, Math.min((innerWidth-72)/400, (innerHeight-160)/700));
+  const sc = $('#scaler');
+  sc.style.width  = 400*s+'px';
+  sc.style.height = 700*s+'px';
+  $('#window').style.transform = `scale(${s})`;
+}
+addEventListener('resize', fit);
+
+/* ================= 启动 ================= */
+buildRing($('#heroRing'));
+buildRing($('#previewRing'));
+renderList();
+renderDetail();
+fit();
+openScreen('list');
+</script>
+</body>
+</html>

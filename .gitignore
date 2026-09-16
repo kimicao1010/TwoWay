@@ -1,0 +1,34 @@
+# ---- macOS ----
+.DS_Store
+._*
+
+# ---- Xcode / 构建产物 ----
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+
+# ---- xcodegen 生成物（project.yml 才是唯一事实来源）----
+*.xcodeproj/
+*.xcworkspace/
+
+# ---- 本工程产物 ----
+dist/
+
+# ---- 工具本地状态 ----
+.workbuddy/
+
+# ---- 密钥与凭据：绝不入库 ----
+*.p12
+*.pem
+*.keychain
+*.keychain-db
+Secrets.swift
