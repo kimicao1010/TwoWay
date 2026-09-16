@@ -72,7 +72,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | C2-3 | `[x]` | 复制 + toast + E1 失败路径 | 随 C2-1 落地；R1 闪烁 650ms 补齐于 C2-2 |
 | C2-4 | `[~]` | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5）—— 列表小环 + 30Hz 单时钟源已随 C2-1 落地，T4 阈值有单测 | 剩：与 `index.html` 并排逐秒一致（手工） |
 | C2-5 | `[~]` | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 —— \`AddAccountView\`（分段外壳 + 导入占位）+ \`ManualEntryView\` + \`ManualEntryModel\`（9 单测）；106 测试全绿 | 剩：手工回归（输入密钥看预览刷新 / E4 报错 / 提交置顶 + toast） |
-| C2-6 | `[ ]` | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填（v1.1 已移除摄像头） | 能解码并预填到手动输入页；E9/E10/E11 异常路径均有提示；Info.plist 无 `NSCameraUsageDescription` |
+| C2-6 | `[~]` | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填 —— \`QRImageDecoder\`（Vision，面积降序）+ \`QRImport.resolve\`（E9/E10/无效 otpauth）+ \`ImportImageView\`（拖放悬停态/缩略图/原地报错/NSOpenPanel）+ \`ManualEntryModel.prefill\`；114 测试全绿（含 CIQRCodeGenerator 真实二维码往返 + 双码合成图） | 剩：手工回归（Finder 拖入真实截图 / HEIC / 损坏图片）；**Info.plist 无 `NSCameraUsageDescription` 已验证 ✅** |
 | C2-7 | `[ ]` | 详情页：身份区 + 168 大环 + 参数卡 + 操作区 | 参数与账户一致 |
 | C2-8 | `[ ]` | 删除确认弹窗（FR-06） | 必经二次确认；确认后回列表 |
 
@@ -139,6 +139,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | **C2-2 左滑实现落地**：\`SwipeRowState\`（R2/R3/R4/R6 纯逻辑 + 8 个单测）+ \`SwipeableAccountRow\`（操作块/互斥/复制闪烁）；R1 闪烁 650ms 补齐；R7/R8 回调接至 RootView（切屏分别等 C2-7/C2-8）；测试 89 → 97 全绿。**R1–R11 手工回归清单待执行** |
 | 2026-09-16 | **窗口 400×732 修复（G-01）**：根视图由固定 732 改为 minHeight 700 可伸缩 —— 原实现窗口实测 764（内容 732 + 32 隐形标题栏），底部 32pt 透明透壁纸；修复后窗口 732、32pt 归列表区，实测无透明带 |
 | 2026-09-16 | **C2-5 手动输入页落地**：\`AppRouter\`（list ↔ addAccount）+ \`AddAccountView\`（分段外壳，导入图片为 C2-6 视觉占位）+ \`ManualEntryView\`（名称/密钥字段 + E4 实时报错 + 高级选项折叠 Picker + 30Hz 实时预览卡）+ \`ManualEntryModel\`（E3/E4/提交，9 单测）；ToastCenter 上移 RootView 共享（添加成功 toast 在列表页显示）；DEBUG 支持 \`--debug-add\` 切屏（U3）；测试 97 → 106 全绿 |
+| 2026-09-16 | **C2-6 导入图片页落地**：\`QRImageDecoder\`（Vision 唯一路径，symbologies=.qr，按包围盒面积降序 = E11 取最大者）+ \`QRImport.resolve\`（noQRCode / account / notOTPAuth / invalidOTPAuth 四态）+ \`ImportImageView\`（fileURL/图片双通道拖放 + 悬停态描边转强调色 + 底色提亮 + 缩略图保留 + NSOpenPanel 仅图片类型）+ \`ManualEntryModel\` 增加 issuer 字段与 \`prefill(from:)\`；手动表单新增「发行方（可选）」字段（预填发行方需要）；单测用 CIQRCodeGenerator 生成真实二维码 + 双码合成图覆盖往返/E9/E10/E11；Info.plist 无 NSCameraUsageDescription 实测确认；测试 106 → 114 全绿 |
 
 ---
 

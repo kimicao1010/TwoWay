@@ -25,6 +25,8 @@ final class AppRouter {
 final class ManualEntryModel {
 
     var displayName = ""
+    /// 发行方（可选）。C2-6 二维码解码成功后预填（PRD：预填发行方）
+    var issuer: String?
     /// 用户原始输入，不清洗地保存（展示层显示原样，校验用清洗值）
     var secretRaw = ""
     var algorithm: OTPParameters.HashAlgorithm = .sha1
@@ -66,15 +68,33 @@ final class ManualEntryModel {
     @discardableResult
     func submit(into store: AccountStore) throws -> String {
         let name = resolvedName
+        let issuer = self.issuer?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let params = try OTPParameters(algorithm: algorithm, digits: digits, period: period)
-        try store.add(displayName: displayName, issuer: nil, secretBase32: secretRaw, parameters: params)
+        try store.add(
+            displayName: displayName,
+            issuer: issuer?.isEmpty == true ? nil : issuer,
+            secretBase32: secretRaw,
+            parameters: params
+        )
         reset()
         return name
+    }
+
+    /// C2-6：二维码解码成功后预填全部字段（PRD §7.4：预填账户名 / 发行方 / 密钥 / 高级参数）
+    func prefill(from fields: QRImport.PrefilledAccount) {
+        displayName = fields.displayName
+        issuer = fields.issuer
+        secretRaw = fields.secretBase32
+        algorithm = fields.parameters.algorithm
+        digits = fields.parameters.digits
+        period = fields.parameters.period
     }
 
     /// 取消 / 成功后清空
     func reset() {
         displayName = ""
+        issuer = nil
         secretRaw = ""
         algorithm = .sha1
         digits = 6

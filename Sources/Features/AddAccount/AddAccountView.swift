@@ -16,6 +16,8 @@ struct AddAccountView: View {
     var onCancel: () -> Void
     /// 成功添加后调用（回列表 + toast「已添加「名称」」）
     var onAdded: (String) -> Void
+    /// 初始分段（默认手动；调试参数 / 解码成功回跳会用到）
+    var initialMethod: Method = .manual
 
     @State private var method: Method = .manual
     @State private var model = ManualEntryModel()
@@ -40,7 +42,11 @@ struct AddAccountView: View {
 
                     switch method {
                     case .importImage:
-                        ImportImagePlaceholder()
+                        ImportImageView { fields in
+                            // 解码成功：预填 + 自动切「手动输入」分段（PRD §7.4）
+                            model.prefill(from: fields)
+                            method = .manual
+                        }
                     case .manual:
                         ManualEntryView(model: model, onSubmit: submit)
                     }
@@ -49,6 +55,7 @@ struct AddAccountView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .onAppear { method = initialMethod }
     }
 
     private static func segmentTitle(_ method: Method) -> String {
@@ -104,6 +111,15 @@ struct ManualEntryView: View {
                 label: "账户名称",
                 text: Binding(get: { model.displayName }, set: { model.displayName = $0 }),
                 placeholder: "例如：you@example.com"
+            )
+
+            TokenTextField(
+                label: "发行方（可选）",
+                text: Binding(
+                    get: { model.issuer ?? "" },
+                    set: { model.issuer = $0.isEmpty ? nil : $0 }
+                ),
+                placeholder: "例如：GitHub"
             )
 
             TokenTextField(
@@ -288,66 +304,3 @@ private struct PreviewCard: View {
     }
 }
 
-// MARK: - 导入图片占位（C2-6 接入：拖放 + NSOpenPanel + Vision 解码 + 预填）
-
-/// 视觉按 PRD §7.4 搭好（拖放区 / 文案 / 引导卡），解码链路 C2-6 落地。
-private struct ImportImagePlaceholder: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: Token.Metrics.scannerRadius)
-                    .fill(
-                        LinearGradient(
-                            colors: [Token.Palette.scannerGradStart, Token.Palette.scannerGradEnd],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                VStack(spacing: 10) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 28, weight: .regular))
-                        .foregroundStyle(Token.Palette.t4)
-                    Text("拖入二维码图片，或点击选择文件")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Token.Palette.t1)
-                    Text("支持 PNG / JPEG / HEIC")
-                        .font(Token.Typography.caption)
-                        .foregroundStyle(Token.Palette.t3)
-                }
-            }
-            .frame(width: Token.Metrics.scannerSize.width, height: Token.Metrics.scannerSize.height)
-            .overlay(
-                RoundedRectangle(cornerRadius: Token.Metrics.scannerRadius)
-                    .strokeBorder(
-                        Token.Palette.border,
-                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])
-                    )
-            )
-
-            guideCard
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    /// 引导卡（PRD 7.4：「在哪里找到二维码？」+ 服务商路径示例）
-    private var guideCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("在哪里找到二维码？")
-                .font(Token.Typography.label)
-                .foregroundStyle(Token.Palette.tTitle)
-            Text("登录服务商的账户安全设置，选择「设置两步验证」即可看到二维码；也可以在手机上截图后拖入本窗口。")
-                .font(.system(size: 12))
-                .foregroundStyle(Token.Palette.t4)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Token.Palette.card)
-        .overlay(
-            RoundedRectangle(cornerRadius: Token.Metrics.primaryButtonRadius)
-                .stroke(Token.Palette.cardBorder, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: Token.Metrics.primaryButtonRadius))
-    }
-}

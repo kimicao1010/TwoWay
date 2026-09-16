@@ -11,6 +11,8 @@ struct RootView: View {
     )
     @State private var router = AppRouter()
     @State private var toast = ToastCenter()
+    /// U3：DEBUG 调试切屏用（--debug-import）
+    @State private var debugInitialMethod: AddAccountView.Method = .manual
 
     var body: some View {
         ZStack {
@@ -27,7 +29,8 @@ struct RootView: View {
                     onAdded: { name in
                         show(.list)
                         toast.show("已添加「\(name)」")
-                    }
+                    },
+                    initialMethod: debugInitialMethod
                 )
                 .transition(.opacity)
             }
@@ -56,6 +59,10 @@ struct RootView: View {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--debug-add") {
                 router.screen = .addAccount
+            }
+            if ProcessInfo.processInfo.arguments.contains("--debug-import") {
+                router.screen = .addAccount
+                debugInitialMethod = .importImage
             }
             #endif
         }
