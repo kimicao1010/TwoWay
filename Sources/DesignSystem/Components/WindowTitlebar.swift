@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// 标题栏（PRD G-03）
@@ -37,9 +38,7 @@ struct WindowTitlebar<Trailing: View, Leading: View>: View {
                 .kerning(0.2)
 
             HStack(spacing: 0) {
-                // 让开系统交通灯，其后放前导操作
-                Color.clear
-                    .frame(width: Token.Metrics.trafficLightBlockWidth)
+                // D10：系统交通灯已隐藏，无需为其预留空间
                 leading()
                 Spacer(minLength: 0)
                 trailing()
@@ -50,6 +49,26 @@ struct WindowTitlebar<Trailing: View, Leading: View>: View {
         .frame(height: Token.Metrics.titlebarHeight)
         .padding(.horizontal, Token.Metrics.titlebarHPadding)
         .background(Token.Palette.titlebar)
+        // 无系统标题栏后，用原生拖拽区让窗口可拖动（不阻挡上层按钮/菜单的点击）
+        .background(WindowDragArea())
+    }
+}
+
+/// 窗口拖拽区（D10）：无系统标题栏时，按住自绘标题栏空白处即可拖动窗口。
+///
+/// 用 `NSWindow.performDrag(with:)` 走 AppKit 原生拖动（含吸附、多显示器处理）。
+/// 放在背景层：上层是可交互的按钮/菜单，空白处的点击才会落到这里。
+struct WindowDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        DraggableView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class DraggableView: NSView {
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
     }
 }
 

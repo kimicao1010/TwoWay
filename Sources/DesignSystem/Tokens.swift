@@ -103,10 +103,9 @@ enum Token {
 
         static let titlebarHeight: CGFloat = 52
         static let titlebarHPadding: CGFloat = 16
-        static let trafficLightSize: CGFloat = 12
-        static let trafficLightGap: CGFloat = 8
-        /// 交通灯区域总宽 = 3×12 + 2×8（对应 Demo `.lights` 实测值）
-        static let trafficLightBlockWidth: CGFloat = 52
+        // D10（2026-09-16）：系统交通灯（关闭/最小化/缩放）已完全移除，
+        // 相关尺寸 token（原 trafficLightSize/Gap/BlockWidth）随之废弃；
+        // 关闭入口移入「⋯」菜单的「退出 2way」，窗口拖动改由自绘标题栏的原生拖拽区负责。
         /// 标题栏右侧操作区最小宽（对应 Demo `.tb-right` 的 min-width）
         static let titlebarTrailingMinWidth: CGFloat = 52
 

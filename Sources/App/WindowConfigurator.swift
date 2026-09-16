@@ -39,6 +39,18 @@ struct WindowConfigurator: NSViewRepresentable {
         // 隐藏标题栏底色，让自绘标题栏直接顶到窗口上沿（PRD G-03）
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
+        window.titleVisibility = .hidden   // 不显示系统标题文字（我们自绘）
+
+        // D10：完全去掉系统窗口按钮（关闭 / 最小化 / 缩放），窗口无系统 chrome。
+        // 关闭改由「⋯」菜单的「退出 2way」与 Cmd+W / Cmd+Q 提供；
+        // 拖动由自绘标题栏的原生拖拽区提供（见 WindowTitlebar 的 WindowDragArea）。
+        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            if let button = window.standardWindowButton(type) {
+                button.isHidden = true
+                button.alphaValue = 0      // 双保险：部分系统路径会重置 isHidden
+                button.isEnabled = false
+            }
+        }
 
         // 让内容延伸进标题栏区域（否则内容下方会空出 32pt）
         if !window.styleMask.contains(.fullSizeContentView) {

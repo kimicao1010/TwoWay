@@ -189,6 +189,11 @@ struct RootView: View {
                         backupSheetError = nil
                         router.backupSheet = .exportGAMigration
                     }
+                    Divider()
+                    // D10：系统「关闭」按钮已移除，这里是图形化的退出入口（另有 Cmd+W / Cmd+Q）
+                    Button("退出 2way") {
+                        NSApplication.shared.terminate(nil)
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .medium))
