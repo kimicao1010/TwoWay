@@ -70,7 +70,6 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | C2-1 | `[x]` | 列表页：搜索（FR-03）、计数、悬停、空态（E2/E7） | 输入即过滤，计数同步 |
 | **C2-2** | `[~]` | **`spike-swipe`：R1–R11 全量 + 手工回归清单** —— 状态机 `SwipeRowModel`（State 层，8 个单测）+ `SwipeableAccountRow`（手势 + 操作块）已落地 | **逻辑级单测全绿；R1–R11 手工回归清单待执行（RK1 的真实手势验证）** |
 | C2-3 | `[x]` | 复制 + toast + E1 失败路径 | 随 C2-1 落地；R1 闪烁 650ms 补齐于 C2-2 |
-| C2-4 | `[~]` | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5）—— 列表小环 + 30Hz 单时钟源已随 C2-1 落地，T4 阈值有单测 | 剩：与 `index.html` 并排逐秒一致（手工） |
 | C2-5 | `[~]` | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 —— \`AddAccountView\`（分段外壳 + 导入占位）+ \`ManualEntryView\` + \`ManualEntryModel\`（9 单测）；106 测试全绿 | 剩：手工回归（输入密钥看预览刷新 / E4 报错 / 提交置顶 + toast） |
 | C2-6 | `[~]` | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填 —— \`QRImageDecoder\`（Vision，面积降序）+ \`QRImport.resolve\`（E9/E10/无效 otpauth）+ \`ImportImageView\`（拖放悬停态/缩略图/原地报错/NSOpenPanel）+ \`ManualEntryModel.prefill\`；114 测试全绿（含 CIQRCodeGenerator 真实二维码往返 + 双码合成图） | 剩：手工回归（Finder 拖入真实截图 / HEIC / 损坏图片）；**Info.plist 无 `NSCameraUsageDescription` 已验证 ✅** |
 | C2-7 | `[x]` | 详情页：身份区 + 168 大环 + 参数卡 + 操作区 —— \`AccountDetailView\` 截图验证 ✅（渐变头像/heroTrack 大环/告警态/五行参数卡/编辑占位+删除图标） | 参数与账户一致 ✅ |
@@ -126,7 +125,8 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | U4 | G-05 缩放策略映射 | 假定：固定尺寸窗口 + 内部不响应式重排 |
 | U5 | 工程纪律 | **已定：沿用 TunnelManager 那套** |
 | U6 | git 仓库 | **已完成** |
-| U9 | 证书创建方式 | **已定：脚本代劳** —— 待执行 |
+| U9 | 证书创建方式 | **已完成**：脚本 `scripts/create-signing-cert.sh` 已创建并接入构建（C0-1b 校验 DR 通过） |
+| U13 | **D9 逃生通道缺口**：`master.key` 丢失 = 全部密钥永久不可恢复（比 Keychain 更脆弱） | **待决策**：建议把 PRD P1「导出加密备份」提前实现（或先给「备份密钥文件」引导） |
 | U12 | `index.html` 与 Ardot 设计稿的第 02 屏仍是 v1.0 摄像头形态（取景框/取景括号/扫描线），需按 PRD §7.4 改版为「导入图片」拖放区 | **C3-1 逐像素比对、C2-6** |
 
 ---
