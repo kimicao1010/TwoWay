@@ -1,19 +1,22 @@
 import Foundation
 import Observation
 
-/// C2-5 屏幕路由（TECH_PLAN §3 状态层）
+/// 屏幕路由（TECH_PLAN §3 状态层）
 ///
-/// 目前只有列表 ↔ 添加账户；C2-7 / C2-8 将扩展 detail / deleteConfirm。
 /// R9/E8：切屏时由调用方把 `store.openedRowID` 复位。
+/// `showsDeleteDialog` 挂在路由上：R8「删除」是切屏后 260ms 自动弹窗（PRD §7.2）。
 @MainActor
 @Observable
 final class AppRouter {
     enum Screen: Equatable {
         case list
         case addAccount
+        case detail   // C2-7：依赖 store.selectedAccountID
     }
 
     var screen: Screen = .list
+    /// C2-8：删除确认弹窗（覆盖详情页）
+    var showsDeleteDialog = false
 }
 
 /// 手动输入页的表单状态机（PRD §7.4 手动输入）

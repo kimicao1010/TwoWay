@@ -32,6 +32,11 @@ final class AccountStore {
     private var secretCache: [UUID: Data] = [:]
     /// 验证码缓存：同一周期内不重算（P-1，30Hz 刷新时避免每帧做 HMAC）
     private var codeCache: [UUID: (counter: UInt64, code: String)] = [:]
+    /// 密钥读取失败的账户（如钥匙串 ACL 未授权）—— 列表仍然展示，码显示占位
+    private var secretUnavailable: Set<UUID> = []
+    /// 失败重试冷却：避免 30Hz 渲染里反复触发钥匙串调用
+    private var lastRetryTime: [UUID: Date] = [:]
+    private static let retryCooldown: TimeInterval = 3
 
     init(
         secrets: any SecretStoring,
@@ -64,17 +69,26 @@ final class AccountStore {
     // MARK: - 加载
 
     /// 启动路径：批量取元数据 + 逐条取密钥
+    ///
+    /// 容错语义：单条密钥读取失败（钥匙串 ACL 未授权 / 用户点了拒绝）**不影响
+    /// 其余账户，也不影响列表展示** —— 该账户进 `secretUnavailable`，码显示占位，
+    /// 之后在 `code(for:)` 里按冷却间隔静默重试（用户点「始终允许」后自动恢复）。
     func load() throws {
         isLoading = true
         defer { isLoading = false }
 
         var loaded: [Account] = []
         var secretsInMemory: [UUID: Data] = [:]
+        var unavailable: Set<UUID> = []
 
         for metadata in try secrets.readAllMetadata() {
             let account = try decoder.decode(Account.self, from: metadata.metadataJSON)
             loaded.append(account)
-            secretsInMemory[metadata.id] = try secrets.read(id: metadata.id).secret
+            if let secret = try? secrets.read(id: metadata.id).secret {
+                secretsInMemory[metadata.id] = secret
+            } else {
+                unavailable.insert(metadata.id)
+            }
         }
 
         // PRD §7.4「添加后置顶」→ 统一按添加时间倒序
@@ -82,6 +96,8 @@ final class AccountStore {
 
         accounts = loaded
         secretCache = secretsInMemory
+        secretUnavailable = unavailable
+        lastRetryTime = [:]
         codeCache = [:]
     }
 
@@ -114,6 +130,8 @@ final class AccountStore {
         accounts.removeAll { $0.id == id }
         secretCache[id] = nil
         codeCache[id] = nil
+        secretUnavailable.remove(id)
+        lastRetryTime[id] = nil
         if openedRowID == id { openedRowID = nil }
         if selectedAccountID == id { selectedAccountID = nil }
     }
@@ -137,11 +155,19 @@ final class AccountStore {
     }
 
     /// 同一周期内命中缓存（P-1：30Hz 刷新不做重复 HMAC）
+    ///
+    /// 密钥缺失时（ACL 未授权等）按冷却间隔静默重试读取 —— 用户在系统弹窗点
+    /// 「始终允许」后无需重启即可恢复显示。
     private func formattedCode(for id: UUID, grouped: Bool) -> String? {
-        guard
-            let account = accounts.first(where: { $0.id == id }),
-            let secret = secretCache[id]
-        else { return nil }
+        guard let account = accounts.first(where: { $0.id == id }) else { return nil }
+
+        let secret: Data
+        if let cached = secretCache[id] {
+            secret = cached
+        } else {
+            guard let fetched = retrySecret(for: id) else { return nil }
+            secret = fetched
+        }
 
         let state = TOTPTime.state(at: now(), period: account.parameters.period)
         if let cached = codeCache[id], cached.counter == state.counter {
@@ -150,6 +176,18 @@ final class AccountStore {
         let code = TOTPEngine.rawCode(secret: secret, counter: state.counter, parameters: account.parameters)
         codeCache[id] = (state.counter, code)
         return grouped ? TOTPEngine.grouped(code) : code
+    }
+
+    /// 按冷却间隔重试单条密钥读取（成功则入缓存并移出失败集合）
+    private func retrySecret(for id: UUID) -> Data? {
+        let last = lastRetryTime[id] ?? .distantPast
+        guard now().timeIntervalSince(last) >= Self.retryCooldown else { return nil }
+        lastRetryTime[id] = now()
+
+        guard let secret = try? secrets.read(id: id).secret else { return nil }
+        secretCache[id] = secret
+        secretUnavailable.remove(id)
+        return secret
     }
 
     /// 当前剩余秒数 / 告警态（供行内倒计环与「N 秒后刷新」）

@@ -119,6 +119,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | # | 事项 | 状态 |
 |---|---|---|
 | U1 | 是否沙盒化 | **已定：先不沙盒** |
+| U10 | ~~密钥存储~~ → **D9：弃用 Keychain，改 EncryptedStore 加密文件**（2026-09-16 用户决策）——本机 login 钥匙串条目 ACL 不自动信任创建者，每条密钥首次读取都弹一次授权框（逐条弹、实测 `open` / 直接执行、同构建均复现），体验不可接受。`wallet.bin`（AES-256-GCM，0600）+ `master.key`（随机 32B，0600，目录 0700）。**S1 显式降级已获用户确认**：防磁盘扫描/他应用读取，不防同用户本地攻击者。遗留：钥匙串里 10 条孤儿条目待用户同意后用 `security delete-generic-password` 清理 |
 | U2 | Bundle ID 与应用名 | **暂定 `com.kimi.2way` / 2way** —— C1-1 存储首个密钥前可改 |
 | U3 | G-04 原型导航处理 | 假定：原生不需要，仅 `#if DEBUG` 保留切屏入口 |
 | U4 | G-05 缩放策略映射 | 假定：固定尺寸窗口 + 内部不响应式重排 |
@@ -141,6 +142,8 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | **C2-5 手动输入页落地**：\`AppRouter\`（list ↔ addAccount）+ \`AddAccountView\`（分段外壳，导入图片为 C2-6 视觉占位）+ \`ManualEntryView\`（名称/密钥字段 + E4 实时报错 + 高级选项折叠 Picker + 30Hz 实时预览卡）+ \`ManualEntryModel\`（E3/E4/提交，9 单测）；ToastCenter 上移 RootView 共享（添加成功 toast 在列表页显示）；DEBUG 支持 \`--debug-add\` 切屏（U3）；测试 97 → 106 全绿 |
 | 2026-09-16 | **C2-6 导入图片页落地**：\`QRImageDecoder\`（Vision 唯一路径，symbologies=.qr，按包围盒面积降序 = E11 取最大者）+ \`QRImport.resolve\`（noQRCode / account / notOTPAuth / invalidOTPAuth 四态）+ \`ImportImageView\`（fileURL/图片双通道拖放 + 悬停态描边转强调色 + 底色提亮 + 缩略图保留 + NSOpenPanel 仅图片类型）+ \`ManualEntryModel\` 增加 issuer 字段与 \`prefill(from:)\`；手动表单新增「发行方（可选）」字段（预填发行方需要）；单测用 CIQRCodeGenerator 生成真实二维码 + 双码合成图覆盖往返/E9/E10/E11；Info.plist 无 NSCameraUsageDescription 实测确认；测试 106 → 114 全绿 |
 | 2026-09-16 | **GA 导出迁移码支持（C2-6b，用户实测反馈驱动）**：用户拿 GA「导出二维码」（\`otpauth-migration://offline?data=...\`）被 E10 误拦。新增 \`OTPMigration\` 手写 protobuf wire 解码（secret/name/issuer/algorithm/digits/type，HOTP 跳过并计数知情）；\`QRImport\` 增加 migrated 路径 —— **多账户批量直接入库 + toast「已导入 N 个账户」（含 HOTP 跳过提示），单账户仍走预填确认流**；PRD P1「从其他验证器迁移」的 GA 导出部分提前落地；用用户真实截图端到端验证（5 个 TOTP 全部识别）；测试 114 → 121 全绿 |
+| 2026-09-16 | **C2-7 详情页 + C2-8 删除确认弹窗实现落地**：\`AccountDetailView\`（身份区渐变头像 / 168 大环 heroTrack / 参数卡 / 复制+删除操作区 / 标题栏编辑占位）+ FR-06 删除确认弹窗（遮罩 0.65 / 304 宽 / 文案明示不可恢复 / Esc=取消）；R7/R8 接通（切详情 + 260ms 自动弹窗）；测试 121 全绿 |
+| 2026-09-16 | **D9：弃用 Keychain → EncryptedStore 加密文件（用户决策）**：本机 login 钥匙串条目 ACL 不信任创建者，同构建读取也逐条弹授权框（实测 \`open\`/直接执行均复现），且 \`load()\` 单条失败曾导致全列表消失（已改为单条容错）。新存储：\`wallet.bin\`（AES-256-GCM 认证加密 + 原子替换 + 0600）+ \`master.key\`（随机 32B + 0600，目录 0700）；6 个单测覆盖往返/跨实例持久化/CRUD/篡改检测/主密钥丢失/文件权限；实测零弹窗 + 跨启动持久化 ✅；测试 121 → 127 全绿。**S1 降级已获用户确认**（见 U10） |
 
 ---
 
