@@ -19,6 +19,7 @@ xcuserdata/
 # ---- xcodegen 生成物（project.yml 才是唯一事实来源）----
 *.xcodeproj/
 *.xcworkspace/
+Sources/App/Info.plist
 
 # ---- 本工程产物 ----
 dist/
