@@ -17,11 +17,7 @@ struct AccountDetailView: View {
         return formatter
     }()
 
-    /// 下一个整秒边界：让 1Hz 刻度与 TOTP 计数器边界对齐（T5/T6）
-    static func nextSecondBoundary(from date: Date = Date()) -> Date {
-        let fraction = date.timeIntervalSince1970.truncatingRemainder(dividingBy: 1)
-        return date.addingTimeInterval(1 - fraction)
-    }
+
 
     private var account: Account? { store.selectedAccount }
 
@@ -127,8 +123,8 @@ struct AccountDetailView: View {
                 strokeWidth: Token.Metrics.ringHeroStroke,
                 heroTrack: true   // 详情大环轨道 #3A3F45（与列表小环不同，勿混）
             )
-            // 码文本 + 秒数：秒对齐 1Hz 刷新（T5/T6）
-            TimelineView(.periodic(from: AccountDetailView.nextSecondBoundary(), by: 1)) { _ in
+            // 码文本 + 秒数：由整秒脉冲驱动（与环同刻，T5/T6）
+            SecondPulseReader { _ in
                 VStack(spacing: 8) {
                     Text(store.displayCode(for: account?.id ?? UUID()) ?? "-- ----")
                         .font(Token.Typography.codeHero)

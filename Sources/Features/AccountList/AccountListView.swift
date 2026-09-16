@@ -19,25 +19,17 @@ struct AccountListView: View {
             searchField
                 .padding(.all, Token.Metrics.searchAreaPadding)
 
-            // 验证码文本按**秒对齐的 1Hz** 刷新（跨周期即换码，T5/T6 精确对齐）；
-            // 倒计环由 RingClock 30Hz 直驱 CAShapeLayer，不经过 SwiftUI（P-1，C3-2）
-            TimelineView(.periodic(from: Self.nextSecondBoundary(), by: 1)) { _ in
-                AccountRows(
-                    store: store,
-                    onCopy: copy,
-                    onDetail: onDetail,
-                    onDelete: onDelete
-                )
-            }
+            // 验证码文本由整秒脉冲驱动（与环同一时钟源 → 换码与环重置同刻）
+            AccountRows(
+                store: store,
+                pulse: SecondPulse.shared.value,
+                onCopy: copy,
+                onDetail: onDetail,
+                onDelete: onDelete
+            )
 
             footer
         }
-    }
-
-    /// 下一个整秒边界：让 1Hz 刻度与 TOTP 计数器边界对齐
-    static func nextSecondBoundary(from date: Date = Date()) -> Date {
-        let fraction = date.timeIntervalSince1970.truncatingRemainder(dividingBy: 1)
-        return date.addingTimeInterval(1 - fraction)
     }
 
     // MARK: 搜索（FR-03）
@@ -64,6 +56,13 @@ struct AccountListView: View {
             Text(store.countText)
                 .font(Token.Typography.caption)
                 .foregroundStyle(Token.Palette.t3)
+
+            #if DEBUG
+            // 调试：证明整秒脉冲在推进（生产构建不显示）
+            Text("· \(SecondPulse.shared.value)")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Token.Palette.t4)
+            #endif
 
             Spacer(minLength: 0)
 
@@ -103,6 +102,8 @@ struct AccountListView: View {
 /// 行列表（滚动条隐藏，PRD FR-01 AC）
 private struct AccountRows: View {
     var store: AccountStore
+    /// 整秒脉冲值：变化即重算全部验证码文本（SwiftUI 观察依赖，T5）
+    var pulse: Int
     var onCopy: (Account) -> Bool
     var onDetail: (Account) -> Void
     var onDelete: (Account) -> Void

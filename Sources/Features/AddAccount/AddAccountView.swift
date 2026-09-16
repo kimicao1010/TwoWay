@@ -72,12 +72,6 @@ struct AddAccountView: View {
         }
     }
 
-    /// 下一个整秒边界：让 1Hz 刻度与 TOTP 计数器边界对齐（T5/T6）
-    static func nextSecondBoundary(from date: Date = Date()) -> Date {
-        let fraction = date.timeIntervalSince1970.truncatingRemainder(dividingBy: 1)
-        return date.addingTimeInterval(1 - fraction)
-    }
-
     private func handleCancel() {
         model.reset()
         onCancel()
@@ -170,10 +164,8 @@ struct ManualEntryView: View {
 
             advancedCard
 
-            // 码文本秒对齐 1Hz 刷新；环由 RingClock 30Hz 直驱（P-1，C3-2）
-            TimelineView(.periodic(from: AddAccountView.nextSecondBoundary(), by: 1)) { _ in
-                PreviewCard(model: model)
-            }
+            // 码文本由整秒脉冲驱动；环同为 RingClock 直驱（同刻刷新）
+            PreviewCard(model: model, pulse: SecondPulse.shared.value)
 
             PrimaryButton(title: "添加账户", action: onSubmit)
         }
@@ -280,6 +272,8 @@ struct ManualEntryView: View {
 
 private struct PreviewCard: View {
     let model: ManualEntryModel
+    /// 整秒脉冲值（变化即重算预览码，T5）
+    let pulse: Int
 
     var body: some View {
         HStack(spacing: 12) {

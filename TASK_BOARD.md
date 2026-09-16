@@ -147,6 +147,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | **D9：弃用 Keychain → EncryptedStore 加密文件（用户决策）**：本机 login 钥匙串条目 ACL 不信任创建者，同构建读取也逐条弹授权框（实测 \`open\`/直接执行均复现），且 \`load()\` 单条失败曾导致全列表消失（已改为单条容错）。新存储：\`wallet.bin\`（AES-256-GCM 认证加密 + 原子替换 + 0600）+ \`master.key\`（随机 32B + 0600，目录 0700）；6 个单测覆盖往返/跨实例持久化/CRUD/篡改检测/主密钥丢失/文件权限；实测零弹窗 + 跨启动持久化 ✅；测试 121 → 127 全绿。**S1 降级已获用户确认**（见 U10） |
 | 2026-09-16 | **C3-2 性能修复（P-1 达成）**：初测 5 环稳态 CPU 36%（SwiftUI 30Hz TimelineView 全列表失效 + AppKit 全窗口布局 churn，sample 定位）。重构：环改 \`RingLayerView\`（CAShapeLayer ×2）+ \`RingClock\` 单一 30Hz 时钟直驱 layer；进度用 CABasicAnimation 按剩余时长 GPU 插值，tick 仅在换周期/告警切换时写 layer；码文本改秒对齐 1Hz \`TimelineView(.periodic)\`。**36% → 0.4-0.7%**，RSS ≈ 92MB，4 线程 |
 | 2026-09-16 | **阶段 3 验收交付完成**：C3-1 差异清单全部有决策（等价替代接受）；C3-3 安全自查按 D9 修订全勾（wallet 密文/0600 权限含单测/零日志/进程参数干净）；C3-4 \`dist/2way-0.1.0.dmg\` 打包 + 挂载实测通过，DR 锚定自签证书 |
+| 2026-09-16 | **T5/T6 修复：码文本刷新链路（用户实测反馈）**。现象：环在动、码文本冻结。定位过程：① 单元测试证明 store 真时钟与取码缓存正常（新增 \`AccountStoreRealtimeClockTests\`，period=1s 跨周期必变）；② \`TimelineView(.periodic)\` 与 \`onReceive\`+通知两条刷新路径在真机未触发重算。方案：新增 \`SecondPulse\`（@Observable 全局秒脉冲，由 RingClock 整秒推进），视图读取脉冲建立原生观察依赖 → 整秒重算码文本；环动画 \`beginTime\` 锚定绝对周期边界 → **换码与环重置同刻**。验证：35 秒跨周期截图，4 个码全部刷新 ✅。**方法论教训：验证码刷新必须跨周期（>30s）比对，7 秒间隔的对比结论无效** |
 
 ---
 

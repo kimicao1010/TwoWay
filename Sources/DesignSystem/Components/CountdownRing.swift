@@ -40,18 +40,24 @@ final class RingClock {
 
     private var clients: [WeakBox] = []
     private var timer: Timer?
+    /// 已广播到的整秒（秒脉冲去重）
+    private var lastBroadcastSecond: Int?
 
     func add(_ view: RingLayerView) {
         clients.append(WeakBox(view: view))
-        startIfNeeded()
+        start()
     }
 
     func remove(_ view: RingLayerView) {
         clients.removeAll { $0.view === view }
-        stopIfNeeded()
     }
 
-    private func startIfNeeded() {
+    /// 常驻启动（幂等）。由 `RootView.onAppear` 与首次订阅触发。
+    ///
+    /// 注意：时钟**不随订阅者清空而停止** —— 早先的实现会在 clients 瞬时为空时
+    /// 自停，之后无人唤醒，导致「环静止 + 码文本冻结」（用户实测反馈）。
+    /// 常驻的代价只是一次/33ms 的空转回调，可忽略。
+    func start() {
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -62,24 +68,48 @@ final class RingClock {
         self.timer = timer
     }
 
-    private func stopIfNeeded() {
-        guard clients.contains(where: { $0.view != nil }) else {
-            timer?.invalidate()
-            timer = nil
-            return
-        }
-    }
-
     private func tick() {
         clients.removeAll { $0.view == nil }
-        guard !clients.isEmpty else {
-            timer?.invalidate()
-            timer = nil
-            return
-        }
         for box in clients {
-            box.view?.tick()
+            box.view?.tick()   // 尺寸未就绪 / 不在窗口内的 view 自行早退
         }
+
+        // 整秒脉冲（绝对秒对齐）：验证码文本 / 剩余秒数由它驱动刷新。
+        // 环与码共用这一个时钟 → 换码与环重置严格同刻（T5/T6）。
+        // 无条件推进（不依赖订阅者数量），保证列表为空/无环时文本仍按秒刷新。
+        let second = Int(Date().timeIntervalSince1970.rounded(.down))
+        if second != lastBroadcastSecond {
+            lastBroadcastSecond = second
+            SecondPulse.shared.bump()
+        }
+    }
+}
+
+/// 全局秒脉冲：`value` 每整秒 +1（由 RingClock 推进）。
+///
+/// 视图在 body 中读取 `SecondPulse.shared.value` 即建立 `@Observable` 观察依赖，
+/// 整秒时由 SwiftUI 原生机制触发重算验证码文本。
+///
+/// 为什么不用 `TimelineView(.periodic)` / `onReceive`：实测两者在真实 App 中
+/// 未能触发重算（码文本冻结，环在动），改用 `@Observable` 观察最可靠。
+@MainActor
+@Observable
+final class SecondPulse {
+    static let shared = SecondPulse()
+
+    private(set) var value = 0
+
+    func bump() {
+        value &+= 1
+    }
+}
+
+/// 读取全局秒脉冲并传入内容：`content` 中的验证码文本在整秒时重算。
+struct SecondPulseReader<Content: View>: View {
+    @ViewBuilder var content: (Int) -> Content
+
+    var body: some View {
+        content(SecondPulse.shared.value)
     }
 }
 

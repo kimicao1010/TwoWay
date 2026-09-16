@@ -92,6 +92,7 @@ struct RootView: View {
             #endif
         }
         .onAppear {
+            RingClock.shared.start()   // 全局唯一时钟：环与码文本共用（T5/T6）
             do {
                 try store.load()
                 loadErrorText = nil
