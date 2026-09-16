@@ -9,8 +9,10 @@ import UniformTypeIdentifiers
 /// - E11 多二维码 → 取面积最大者（解码结果已按面积降序）
 /// - 不申请摄像头权限（Info.plist 无 NSCameraUsageDescription，验收判据）
 struct ImportImageView: View {
-    /// 解码成功回调：预填 + 自动切「手动输入」分段（PRD：交由用户确认后提交）
+    /// 单账户解码成功：预填 + 自动切「手动输入」分段（PRD：交由用户确认后提交）
     var onDecoded: (QRImport.PrefilledAccount) -> Void
+    /// GA 迁移码多账户：批量直接导入（单账户迁移仍走预填确认流）
+    var onBatchImport: ([QRImport.PrefilledAccount], _ skippedHOTPCount: Int) -> Void
 
     @State private var selectedImage: NSImage?
     @State private var errorMessage: String?
@@ -200,6 +202,14 @@ struct ImportImageView: View {
         switch QRImport.resolve(strings) {
         case .account(let fields):
             onDecoded(fields)   // 成功 → 预填 + 切手动分段
+        case .migrated(let accounts, let skipped):
+            if accounts.count == 1 {
+                onDecoded(accounts[0])   // 单账户迁移仍走「预填确认」流
+            } else {
+                onBatchImport(accounts, skipped)
+            }
+        case .migrationWithoutTOTP:
+            errorMessage = "迁移码中没有可导入的 TOTP 账户（HOTP 暂不支持）"
         case .noQRCode:
             errorMessage = "未识别到二维码，请确认图片清晰、完整且包含有效二维码"
         case .notOTPAuth:

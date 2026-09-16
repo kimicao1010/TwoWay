@@ -140,6 +140,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | **窗口 400×732 修复（G-01）**：根视图由固定 732 改为 minHeight 700 可伸缩 —— 原实现窗口实测 764（内容 732 + 32 隐形标题栏），底部 32pt 透明透壁纸；修复后窗口 732、32pt 归列表区，实测无透明带 |
 | 2026-09-16 | **C2-5 手动输入页落地**：\`AppRouter\`（list ↔ addAccount）+ \`AddAccountView\`（分段外壳，导入图片为 C2-6 视觉占位）+ \`ManualEntryView\`（名称/密钥字段 + E4 实时报错 + 高级选项折叠 Picker + 30Hz 实时预览卡）+ \`ManualEntryModel\`（E3/E4/提交，9 单测）；ToastCenter 上移 RootView 共享（添加成功 toast 在列表页显示）；DEBUG 支持 \`--debug-add\` 切屏（U3）；测试 97 → 106 全绿 |
 | 2026-09-16 | **C2-6 导入图片页落地**：\`QRImageDecoder\`（Vision 唯一路径，symbologies=.qr，按包围盒面积降序 = E11 取最大者）+ \`QRImport.resolve\`（noQRCode / account / notOTPAuth / invalidOTPAuth 四态）+ \`ImportImageView\`（fileURL/图片双通道拖放 + 悬停态描边转强调色 + 底色提亮 + 缩略图保留 + NSOpenPanel 仅图片类型）+ \`ManualEntryModel\` 增加 issuer 字段与 \`prefill(from:)\`；手动表单新增「发行方（可选）」字段（预填发行方需要）；单测用 CIQRCodeGenerator 生成真实二维码 + 双码合成图覆盖往返/E9/E10/E11；Info.plist 无 NSCameraUsageDescription 实测确认；测试 106 → 114 全绿 |
+| 2026-09-16 | **GA 导出迁移码支持（C2-6b，用户实测反馈驱动）**：用户拿 GA「导出二维码」（\`otpauth-migration://offline?data=...\`）被 E10 误拦。新增 \`OTPMigration\` 手写 protobuf wire 解码（secret/name/issuer/algorithm/digits/type，HOTP 跳过并计数知情）；\`QRImport\` 增加 migrated 路径 —— **多账户批量直接入库 + toast「已导入 N 个账户」（含 HOTP 跳过提示），单账户仍走预填确认流**；PRD P1「从其他验证器迁移」的 GA 导出部分提前落地；用用户真实截图端到端验证（5 个 TOTP 全部识别）；测试 114 → 121 全绿 |
 
 ---
 

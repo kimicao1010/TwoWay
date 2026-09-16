@@ -16,6 +16,8 @@ struct AddAccountView: View {
     var onCancel: () -> Void
     /// 成功添加后调用（回列表 + toast「已添加「名称」」）
     var onAdded: (String) -> Void
+    /// GA 迁移码批量导入完成（回列表 + toast 导入数量）
+    var onImported: (Int, _ skippedHOTPCount: Int) -> Void
     /// 初始分段（默认手动；调试参数 / 解码成功回跳会用到）
     var initialMethod: Method = .manual
 
@@ -42,11 +44,16 @@ struct AddAccountView: View {
 
                     switch method {
                     case .importImage:
-                        ImportImageView { fields in
-                            // 解码成功：预填 + 自动切「手动输入」分段（PRD §7.4）
-                            model.prefill(from: fields)
-                            method = .manual
-                        }
+                        ImportImageView(
+                            onDecoded: { fields in
+                                // 解码成功：预填 + 自动切「手动输入」分段（PRD §7.4）
+                                model.prefill(from: fields)
+                                method = .manual
+                            },
+                            onBatchImport: { fields, skipped in
+                                importAll(fields, skippedHOTPCount: skipped)
+                            }
+                        )
                     case .manual:
                         ManualEntryView(model: model, onSubmit: submit)
                     }
@@ -80,6 +87,29 @@ struct AddAccountView: View {
         } catch {
             toast.show("添加失败，请检查密钥后重试")
         }
+    }
+
+    /// GA 迁移码批量导入：逐条入库，统计成功数（不中断于单条失败）
+    private func importAll(_ fields: [QRImport.PrefilledAccount], skippedHOTPCount: Int) {
+        var imported = 0
+        for field in fields {
+            do {
+                try store.add(
+                    displayName: field.displayName,
+                    issuer: field.issuer,
+                    secretBase32: field.secretBase32,
+                    parameters: field.parameters
+                )
+                imported += 1
+            } catch {
+                // 单条失败不中断：密钥在解析端已验证过，理论不应发生；记 0 保底
+            }
+        }
+        guard imported > 0 else {
+            toast.show("导入失败，请重试")
+            return
+        }
+        onImported(imported, skippedHOTPCount)
     }
 }
 

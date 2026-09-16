@@ -18,6 +18,10 @@ enum QRImport {
         case noQRCode
         /// 解码成功（含全部预填字段）
         case account(PrefilledAccount)
+        /// GA 导出迁移码：多个账户（批量直接导入）
+        case migrated([PrefilledAccount], skippedHOTPCount: Int)
+        /// 迁移码里没有可导入的 TOTP 账户（全部 HOTP 或为空）
+        case migrationWithoutTOTP
         /// E10：二维码有效但不是 otpauth（如普通网址）
         case notOTPAuth
         /// 二维码是 otpauth 但内容无效 / 不受支持（缺密钥、HOTP、非法参数）
@@ -30,8 +34,28 @@ enum QRImport {
 
         var sawOTPAuth = false
         for string in decodedStrings {
+            let lowered = string.lowercased()
+
+            // GA 导出迁移码：一个码打包多个账户
+            if lowered.hasPrefix("otpauth-migration://") {
+                if let result = try? OTPMigration.parse(string) {
+                    return .migrated(
+                        result.entries.map {
+                            PrefilledAccount(
+                                displayName: $0.displayName,
+                                issuer: $0.issuer,
+                                secretBase32: Base32.encode($0.secret),
+                                parameters: $0.parameters
+                            )
+                        },
+                        skippedHOTPCount: result.skippedHOTPCount
+                    )
+                }
+                return .migrationWithoutTOTP
+            }
+
             guard let parsed = try? OTPAuthURI.parse(string) else {
-                if string.lowercased().hasPrefix("otpauth://") {
+                if lowered.hasPrefix("otpauth://") {
                     sawOTPAuth = true
                 }
                 continue

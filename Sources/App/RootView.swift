@@ -30,6 +30,14 @@ struct RootView: View {
                         show(.list)
                         toast.show("已添加「\(name)」")
                     },
+                    onImported: { count, skipped in
+                        show(.list)
+                        if skipped > 0 {
+                            toast.show("已导入 \(count) 个账户（\(skipped) 个 HOTP 账户不受支持已跳过）")
+                        } else {
+                            toast.show("已导入 \(count) 个账户")
+                        }
+                    },
                     initialMethod: debugInitialMethod
                 )
                 .transition(.opacity)
