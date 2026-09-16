@@ -7,8 +7,9 @@
 #
 # 关键约束（TECH_PLAN §9 / D5）：
 #   必须用自签证书「2way Local Signing」签名，禁止 ad-hoc。
-#   ad-hoc 的 designated requirement 是 cdhash，每次重建都变，
-#   会让 Keychain 里已存的密钥无法静默读取。
+#   ad-hoc 的 designated requirement 是 cdhash，每次重建都变。
+#   （D9 起密钥存储为加密文件，不依赖 Keychain ACL；DR 锚定仍有价值：
+#    未来若回归 Keychain，或用作身份锚点，均需要稳定的 DR。）
 #
 # 用法：bash scripts/release-package.sh
 #
@@ -50,7 +51,7 @@ xcodebuild archive \
   -project TwoWay.xcodeproj \
   -scheme "$SCHEME" \
   -configuration Release \
-  -destination 'platform=macOS,arch=arm64' \
+  -destination 'generic/platform=macOS' \
   -archivePath "$ARCHIVE" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$IDENTITY" \
