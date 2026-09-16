@@ -166,21 +166,30 @@ final class RingLayerView: NSView {
     }
 
     /// 30Hz 时钟回调：只在**周期切换**时重设动画（否则零 layer 写入）。
-    /// 进度本身由 CABasicAnimation 在渲染服务端插值（p₀ → 0，时长 = 精确剩余秒数），
-    /// CPU 在两次周期之间零工作，且视觉完全连续（T3）。
+    ///
+    /// 同步关键（用户实测反馈：环与码刷新不同步）：动画的 `beginTime` 锚定到
+    /// **绝对周期边界**（host time = 现在 − 已流逝秒数），CA 从边界时刻开始插值
+    /// —— 无论 tick 因 Timer 合并延迟多少毫秒，环相位都与「换码时刻」（整秒边界）
+    /// 严格同步，且永不漂移。进度插值在渲染服务端完成（T3 连续平滑，P-1 零 CPU）。
     func tick() {
         guard window != nil else { return }
-        let state = TOTPTime.state(at: Date(), period: period > 0 ? period : 30)
+        let date = Date()
+        let effectivePeriod = period > 0 ? period : 30
+        let state = TOTPTime.state(at: date, period: effectivePeriod)
 
         if state.counter != lastCounter {
             lastCounter = state.counter
-            let end = CGFloat(RingGeometry.strokeEnd(for: state.progress))
+            let elapsed = date.timeIntervalSince1970
+                .truncatingRemainder(dividingBy: effectivePeriod)
+
             progressLayer.removeAnimation(forKey: "progress")
-            progressLayer.strokeEnd = end   // 模型值（动画移除后不跳变）
+            progressLayer.strokeEnd = CGFloat(RingGeometry.strokeEnd(for: state.progress))
+
             let animation = CABasicAnimation(keyPath: "strokeEnd")
-            animation.fromValue = NSNumber(value: RingGeometry.strokeEnd(for: state.progress))
+            animation.fromValue = 1.0   // 周期边界处进度恒为满环
             animation.toValue = 0.0
-            animation.duration = state.progress * (period > 0 ? period : 30)   // 精确剩余时长
+            animation.duration = effectivePeriod
+            animation.beginTime = CACurrentMediaTime() - elapsed
             animation.isRemovedOnCompletion = false
             animation.fillMode = .forwards
             progressLayer.add(animation, forKey: "progress")
