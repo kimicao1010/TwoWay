@@ -51,7 +51,7 @@ struct RootView: View {
                     AddAccountView(
                         store: store,
                         toast: toast,
-                        onCancel: { show(.detail) },
+                        onCancel: { show(.list) },
                         onAdded: { _ in },
                         onImported: { _, _ in },
                         editing: AddAccountView.EditTarget(
@@ -59,7 +59,7 @@ struct RootView: View {
                             secretBase32: store.secretBase32(for: account.id) ?? ""
                         ),
                         onSaved: { name in
-                            show(.detail)
+                            show(.list)
                             toast.show("已保存「\(name)」")
                         }
                     )
@@ -67,30 +67,26 @@ struct RootView: View {
                 } else {
                     listScreen
                 }
+            }
 
-            case .detail:
-                // E2：账户不存在（已删空 / 无选中）时回落列表
-                if store.selectedAccount != nil {
-                    AccountDetailView(
-                        store: store,
-                        toast: toast,
-                        showsDeleteDialog: router.showsDeleteDialog,
-                        onRequestDeleteDialog: { router.showsDeleteDialog = true },
-                        onCancelDelete: { router.showsDeleteDialog = false },
-                        onRequestEdit: { router.screen = .editAccount },
-                        onBack: { show(.list) },
-                        onDeleted: { name in
-                            show(.list)
-                            toast.show("已删除「\(name)」")
-                        }
-                    )
-                    .transition(.opacity)
-                } else {
-                    listScreen
-                }
+            // R8（v1.8）：删除确认**就地覆盖列表**，不再经详情页
+            if let pending = pendingDeleteAccount {
+                DeleteConfirmDialog(
+                    accountName: pending.displayName,
+                    onCancel: { router.pendingDeleteID = nil },
+                    onConfirm: confirmDelete
+                )
+                .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: Token.Motion.screenTransition), value: router.screen)
+        .animation(.easeOut(duration: 0.22), value: router.pendingDeleteID)
+        // Esc：有删除确认弹窗时先关弹窗（PRD §7.2 R8）
+        .onExitCommand {
+            if router.pendingDeleteID != nil {
+                router.pendingDeleteID = nil
+            }
+        }
         // R9/E8：切屏时全部行复位
         .overlay(alignment: .bottom) {
             if let current = toast.current {
@@ -140,11 +136,13 @@ struct RootView: View {
                 router.screen = .addAccount
                 debugInitialMethod = .importImage
             }
-            // --debug-detail [--debug-detail-dialog]：直进详情屏（可带删除确认弹窗）
-            if ProcessInfo.processInfo.arguments.contains("--debug-detail") {
-                store.selectedAccountID = store.accounts.first?.id
-                router.screen = .detail
-                router.showsDeleteDialog = ProcessInfo.processInfo.arguments.contains("--debug-detail-dialog")
+            // --debug-delete-dialog：在列表上直开删除确认弹窗（回归截图用）
+            if ProcessInfo.processInfo.arguments.contains("--debug-delete-dialog") {
+                router.pendingDeleteID = store.accounts.first?.id
+            }
+            // --debug-open-row：强制展开首行，便于截图核对左滑操作块（无辅助功能权限时无法程序化拖拽）
+            if ProcessInfo.processInfo.arguments.contains("--debug-open-row") {
+                store.setOpenedRow(store.accounts.first?.id)
             }
             // --debug-edit：直进编辑屏
             if ProcessInfo.processInfo.arguments.contains("--debug-edit") {
@@ -216,15 +214,15 @@ struct RootView: View {
                 store: store,
                 toast: toast,
                 onAdd: { show(.addAccount) },
-                onDetail: { account in
-                    // R7：行复位 + 切详情屏
+                onEdit: { account in
+                    // R7：行复位 + 进编辑页
                     store.selectedAccountID = account.id
-                    showDetail(autoDeleteConfirm: false)
+                    show(.editAccount)
                 },
                 onDelete: { account in
-                    // R8：切详情屏后 260ms 自动弹删除确认
+                    // R8（v1.8）：不切屏，就地弹确认
                     store.selectedAccountID = account.id
-                    showDetail(autoDeleteConfirm: true)
+                    router.pendingDeleteID = account.id
                 }
             )
         }
@@ -233,6 +231,24 @@ struct RootView: View {
     private func show(_ screen: AppRouter.Screen) {
         store.setOpenedRow(nil)   // R9/E8：离开列表屏时行复位
         router.screen = screen
+    }
+
+    /// 待确认删除的账户（E2：已被删掉时弹窗自然消失）
+    private var pendingDeleteAccount: Account? {
+        guard let id = router.pendingDeleteID else { return nil }
+        return store.accounts.first { $0.id == id }
+    }
+
+    /// FR-06：确认删除 → 就地执行 + toast（不离开列表）
+    private func confirmDelete() {
+        defer { router.pendingDeleteID = nil }
+        guard let pending = pendingDeleteAccount else { return }
+        do {
+            try store.delete(id: pending.id)
+            toast.show("已删除「\(pending.displayName)」")
+        } catch {
+            toast.show("删除失败，请重试")
+        }
     }
 
     // MARK: 备份（C4-3）
@@ -449,20 +465,6 @@ struct RootView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmm"
         return formatter.string(from: Date())
-    }
-
-    /// R7/R8：进入详情。R8 在切屏动画（260ms）后自动弹删除确认（PRD §7.2）
-    private func showDetail(autoDeleteConfirm: Bool) {
-        store.setOpenedRow(nil)
-        router.showsDeleteDialog = false
-        router.screen = .detail
-        if autoDeleteConfirm {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(Token.Motion.deleteDialogDelay * 1_000_000_000))
-                guard router.screen == .detail else { return }
-                router.showsDeleteDialog = true
-            }
-        }
     }
 
     #if DEBUG

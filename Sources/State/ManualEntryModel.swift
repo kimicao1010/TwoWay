@@ -4,20 +4,19 @@ import Observation
 /// 屏幕路由（TECH_PLAN §3 状态层）
 ///
 /// R9/E8：切屏时由调用方把 `store.openedRowID` 复位。
-/// `showsDeleteDialog` 挂在路由上：R8「删除」是切屏后 260ms 自动弹窗（PRD §7.2）。
+/// `pendingDeleteID` 挂在路由上：R8「删除」**不切屏**，直接在列表上弹确认（PRD v1.8 §7.2）。
 @MainActor
 @Observable
 final class AppRouter {
     enum Screen: Equatable {
         case list
         case addAccount
-        case detail        // C2-7：依赖 store.selectedAccountID
         case editAccount   // P1 C4-2：编辑选中账户（依赖 store.selectedAccountID）
     }
 
     var screen: Screen = .list
-    /// C2-8：删除确认弹窗（覆盖详情页）
-    var showsDeleteDialog = false
+    /// R8：待在弹窗中确认删除的账户（nil = 无弹窗）
+    var pendingDeleteID: UUID?
     /// C4-3：备份导出/导入弹窗
     var backupSheet: BackupSheet?
 

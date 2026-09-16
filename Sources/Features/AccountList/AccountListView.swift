@@ -9,9 +9,9 @@ struct AccountListView: View {
     /// 共享 Toast（复制反馈 / 添加成功提示等，渲染在 RootView 层）
     let toast: ToastCenter
     var onAdd: () -> Void
-    /// R7：左滑「详情」→ 进入详情页（切屏在 C2-7 接入）
-    var onDetail: (Account) -> Void
-    /// R8：左滑「删除」→ 进入详情页并自动弹删除确认（260ms 弹窗在 C2-8 接入）
+    /// R7：左滑「编辑」→ 进入编辑页（v1.8：原「详情」入口改为「编辑」）
+    var onEdit: (Account) -> Void
+    /// R8：左滑「删除」→ **就地**弹出删除确认（不切屏，v1.8）
     var onDelete: (Account) -> Void
 
     var body: some View {
@@ -25,7 +25,7 @@ struct AccountListView: View {
                 store: store,
                 pulse: CodePulse.shared.value,
                 onCopy: copy,
-                onDetail: onDetail,
+                onEdit: onEdit,
                 onDelete: onDelete
             )
 
@@ -106,7 +106,7 @@ private struct AccountRows: View {
     /// 换码脉冲值：变化即重算全部验证码文本（SwiftUI 观察依赖，T5）
     var pulse: Int
     var onCopy: (Account) -> Bool
-    var onDetail: (Account) -> Void
+    var onEdit: (Account) -> Void
     var onDelete: (Account) -> Void
 
     var body: some View {
@@ -118,7 +118,7 @@ private struct AccountRows: View {
                         code: store.displayCode(for: account.id),
                         isOpen: store.openedRowID == account.id,
                         onTapCopy: { onCopy(account) },
-                        onDetail: { onDetail(account) },
+                        onEdit: { onEdit(account) },
                         onDelete: { onDelete(account) },
                         onSetOpen: { store.setOpenedRow($0 ? account.id : nil) }
                     )
@@ -133,7 +133,7 @@ private struct AccountRows: View {
 
 /// 左滑容器（PRD FR-02 R2/R5/R7/R8/R9/R10）
 ///
-/// 层次：ZStack 底层是右侧操作块（详情｜删除），上层是不透明行内容。
+/// 层次：ZStack 底层是右侧操作块（编辑｜删除），上层是不透明行内容。
 /// 行底色必须不透明（`#1B1C1E`），否则操作块会透出（PRD 7.2）。
 private struct SwipeableAccountRow: View {
     let account: Account
@@ -141,7 +141,7 @@ private struct SwipeableAccountRow: View {
     let isOpen: Bool
     /// 点按复制，返回是否成功（成功 → 行闪烁 R1）
     var onTapCopy: () -> Bool
-    var onDetail: () -> Void
+    var onEdit: () -> Void
     var onDelete: () -> Void
     /// 展开/收起 → 写回 store.openedRowID（R9 单值互斥）
     var onSetOpen: (Bool) -> Void
@@ -164,6 +164,11 @@ private struct SwipeableAccountRow: View {
             actionBlock
             rowContent
         }
+        // 首帧即已展开（如调试钩子 / 状态预设）：直接对齐，避免
+        // `onChange` 不触发导致「store 说展开、视觉没展开」的不一致
+        .onAppear {
+            if isOpen { model.open() }
+        }
         // isOpen 由 AccountRows 依据 store.openedRowID 计算，
         // 它变化即 R9 互斥同步 / R7 R8 复位 / E8 切屏复位
         .onChange(of: isOpen) { _, open in
@@ -179,13 +184,13 @@ private struct SwipeableAccountRow: View {
 
     private var actionBlock: some View {
         HStack(spacing: Token.Metrics.actionButtonSpacing) {
-            ActionButton(title: "详情", background: Token.Palette.actionDetail, hoverBackground: Token.Palette.actionDetailHover) {
-                // R7：行复位 + 进入详情
+            ActionButton(title: "编辑", background: Token.Palette.actionDetail, hoverBackground: Token.Palette.actionDetailHover) {
+                // R7：行复位 + 进入编辑页（v1.8：原「详情」入口改为「编辑」）
                 onSetOpen(false)
-                onDetail()
+                onEdit()
             }
             ActionButton(title: "删除", background: Token.Palette.danger, hoverBackground: Token.Palette.danger.opacity(0.92)) {
-                // R8：行复位 + 进入详情并自动弹确认（弹窗时序在 C2-8 接入）
+                // R8：行复位 + 就地弹出删除确认（不切屏，v1.8）
                 onSetOpen(false)
                 onDelete()
             }

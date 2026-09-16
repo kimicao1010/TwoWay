@@ -178,8 +178,6 @@ enum Token {
         )
         /// 屏幕切换
         static let screenTransition: Double = 0.26
-        /// 删除确认弹窗延迟（切屏后弹出）
-        static let deleteDialogDelay: Double = 0.26
         /// Toast 停留时长
         static let toastDuration: Double = 1.8
     }

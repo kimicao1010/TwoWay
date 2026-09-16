@@ -72,8 +72,8 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | C2-3 | `[x]` | 复制 + toast + E1 失败路径 | 随 C2-1 落地；R1 闪烁 650ms 补齐于 C2-2 |
 | C2-5 | `[~]` | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 —— \`AddAccountView\`（分段外壳 + 导入占位）+ \`ManualEntryView\` + \`ManualEntryModel\`（9 单测）；106 测试全绿 | 剩：手工回归（输入密钥看预览刷新 / E4 报错 / 提交置顶 + toast） |
 | C2-6 | `[~]` | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填 —— \`QRImageDecoder\`（Vision，面积降序）+ \`QRImport.resolve\`（E9/E10/无效 otpauth）+ \`ImportImageView\`（拖放悬停态/缩略图/原地报错/NSOpenPanel）+ \`ManualEntryModel.prefill\`；114 测试全绿（含 CIQRCodeGenerator 真实二维码往返 + 双码合成图） | 剩：手工回归（Finder 拖入真实截图 / HEIC / 损坏图片）；**Info.plist 无 `NSCameraUsageDescription` 已验证 ✅** |
-| C2-7 | `[x]` | 详情页：身份区 + 168 大环 + 参数卡 + 操作区 —— \`AccountDetailView\` 截图验证 ✅（渐变头像/heroTrack 大环/告警态/五行参数卡/编辑占位+删除图标） | 参数与账户一致 ✅ |
-| C2-8 | `[x]` | 删除确认弹窗（FR-06）—— 遮罩 0.65 / 304 宽 / 文案明示不可恢复 / 取消+红底删除；R8 260ms 自动弹窗 ✅ | 必经二次确认 ✅；真实删除走手工回归 |
+| ~~C2-7~~ | `[-]` | ~~详情页：身份区 + 168 大环 + 参数卡 + 操作区~~ —— **v1.8 用户实测决策移除**（`AccountDetailView` 已删除，PRD §7.5 标注废弃） | 不适用（参数核对改由左滑「编辑」承担） |
+| C2-8 | `[x]` | 删除确认弹窗（FR-06）—— **v1.8 改为就地覆盖列表**：`DeleteConfirmDialog`（遮罩 0.65 / 304 宽 / 标题明示账户名 / 文案明示不可恢复 / 取消+红底删除 / Esc 与遮罩关闭）；左滑「删除」直接弹窗，确认后留在列表 + toast | 必经二次确认 ✅ 截图验证；无切屏 ✅ |
 | C2-4 | `[x]` | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5）—— **用户实测：与 GA 并排比对逐秒一致（T6 ✅）**；列表/详情环、T4 告警态截图确认 | 与 \`index.html\` 并排逐秒一致 ✅（用户 2026-09-16 确认） |
 
 **C2-2 明细（R1–R11 → 实现映射）**
@@ -86,8 +86,8 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | R4 横向 >8px 且大于纵向才拖拽 | `SwipeLogic.isHorizontalDrag`；竖向滚动不受影响 |
 | R5 展开行点按仅收起 | `SwipeableAccountRow.handleTap` |
 | R6 拖拽后 click 被吞 | `SwipeRowModel.shouldSuppressTap()`（0.15s 抑制窗口）+ SwiftUI DragGesture minimumDistance 天然不触发 tap，双保险 |
-| R7 点「详情」→ 详情页 | `onDetail` 回调已接 RootView（切屏在 C2-7 接入） |
-| R8 点「删除」→ 详情页 + 自动弹确认 | `onDelete` 回调已接 RootView（260ms 弹窗在 C2-8 接入） |
+| R7 点「编辑」→ 编辑页 | `onEdit` → `store.selectedAccountID` + `show(.editAccount)`（v1.8：原「详情」改为「编辑」） |
+| R8 点「删除」→ 就地弹确认 | `onDelete` → `router.pendingDeleteID`（不切屏）；确认走 `AccountStore.delete` + toast（v1.8） |
 | R9 同时最多一行展开 | `store.openedRowID` 单值互斥；本行确认拖拽即收起其他行（对齐 Demo pointerdown 行为） |
 | R10 拖拽中关过渡跟手、禁止文本选中 | `.animation(isDragging ? nil : settle)`；`textSelection(.disabled)` |
 | R11 悬停浮现复制图标、点击不冒泡 | 复制图标为独立 Button（吞掉点击），行底 hover `#232528` |
@@ -98,7 +98,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 - [ ] 拖拽后立即点按，不触发复制（R6，RK1 高风险项）
 - [ ] 竖向滚动列表时不触发行位移；右滑不错位
 - [ ] 展开行 A 后再拖行 B：A 收起、B 可展开；展开行点按仅收起不复制
-- [ ] 点「详情」「删除」行复位；悬停复制图标点击复制且不触发两次 toast
+- [ ] 点「编辑」「删除」行复位；删除弹窗可在列表上直接取消/确认（不跳转）；悬停行底 `#232528` 可点击提示
 - [ ] 复制后行闪 `#2E3237` 650ms；告警态（≤5s）下复制照常（E6）
 
 ---
@@ -154,7 +154,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 卡 | 状态 | 内容 | 完成判据 |
 |---|---|---|---|
 | C4-1 | `[x]` | **剪贴板自动清除（S4，v1.3 由 P1 提前）** —— `ClipboardGuard`：记录写入时 `changeCount`，仅当仍归本应用所有才清除（**绝不误清用户后来复制的内容**）；默认 30s；`Pasteboard` 协议抽象出可注入实现供单测（7 个单测） | 到期清除 ✅ / 他方写入不误清 ✅ / 开关与失败路径 ✅ |
-| C4-2 | `[x]` | **编辑账户**（名称 / 发行方 / 密钥 / 高级参数）—— `AccountStore.update`（E3/E4 重校验 + 清取码缓存）+ `ManualEntryModel.editingAccountID` + 编辑模式复用表单（隐藏分段、按钮「保存」）；详情页标题栏铅笔图标进入；新增 3 单测 | 预填现值 ✅ 截图验证 / 不新增账户、id 不变 ✅ / 换密钥后取码变化 ✅ |
+| C4-2 | `[x]` | **编辑账户**（名称 / 发行方 / 密钥 / 高级参数）—— `AccountStore.update`（E3/E4 重校验 + 清取码缓存）+ `ManualEntryModel.editingAccountID` + 编辑模式复用表单（隐藏分段、按钮「保存」）；**入口：左滑操作块「编辑」**（v1.8，原为详情页标题栏铅笔）；3 单测 | 预填现值 ✅ 截图验证 / 不新增账户、id 不变 ✅ / 换密钥后取码变化 ✅ |
 | C4-3 | `[x]` | **导入导出/备份** —— `BackupArchive`（自描述格式 `2WBA`+版本+PBKDF2 参数+盐+AES-GCM；**口令派生 PBKDF2-HMAC-SHA256 210k 轮**，不依赖 `master.key`）+ `AccountStore.backupEntries()/importBackup()`（同 id 幂等跳过）+ 列表标题栏「更多」菜单（PRD §7.1）+ 导出/导入弹窗（口令二次确认 / 就地报错）；9 个单测（往返/头格式/随机性/错口令/篡改/坏文件/弱口令/**导入幂等**/**灾难恢复端到端**） | **导出 → 全新空存储 → 导入 → 取码一致 ✅**（单测）|
 | — | `[x]` | ~~触控板双指横滑~~ | **不做（PRD v1.3，用户决策）** |
 | — | `[x]` | ~~全局快捷键~~ | **不做（PRD v1.3，用户决策）** |
@@ -219,6 +219,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | **C4-3 导入导出/备份落地（兼 U13 逃生通道闭环）**：`BackupArchive` 自描述格式（magic `2WBA` / 版本 / PBKDF2 轮数与盐 / AES-GCM combined）；口令派生用 **PBKDF2-HMAC-SHA256 + 随机盐 + 210k 轮**（CommonCrypto），加密用 **AES-256-GCM** 认证加密（口令错误与文件篡改都明确失败，不解出脏数据）；`AccountStore.backupEntries()/importBackup()`（同 id 幂等跳过、不覆盖本地改动、按 addedAt 重排）；列表标题栏「更多」菜单（PRD §7.1 的三点图标）+ 导出/导入弹窗（口令二次确认、就地报错）；导出文件 0600；9 个单测含**灾难恢复端到端**（导出 → 全新空存储 → 导入 → 取码一致）；测试 139 → 148 全绿 |
 | 2026-09-16 | **C4-2 编辑账户落地**：`AccountStore.update`（名称/发行方/密钥/参数；E3 清洗 + E4 校验；清该账户取码缓存）+ `secretBase32(for:)`（预填用，密钥不出内存）+ `ManualEntryModel` 编辑模式（`editingAccountID` 路由 add/update）+ 表单复用（编辑时隐藏分段控件、主按钮文案「保存」）+ `AppRouter.Screen.editAccount`；详情页铅笔图标从「占位 toast」改为真入口；3 个单测（预填/不新增且 id 不变/换密钥取码变化/空名兜底）；截图验证编辑页；测试 136 → 139 全绿 |
 | 2026-09-16 | **C4-1 剪贴板自动清除（S4）落地**：\`ClipboardGuard\`（记录写入时 changeCount，仅当仍归本应用所有才清除，**绝不误清用户后续复制的内容** —— PRD §4.7 关键约束）；默认 30s；\`Pasteboard\` 协议 + \`SystemPasteboard\` 抽象出可注入实现；7 个单测（到期清除 / 他方写入不误清 / 手动触发 / 失败路径 / 开关 / 连续复制重置 / 默认延迟）；列表与详情两处复制路径接入；测试 129 → 136 全绿 |
+| 2026-09-16 | **C4-11 移除详情页 + 删除就地确认（PRD v1.8，用户实测决策）**：① 删除不再中转详情页 —— 左滑「删除」→ `router.pendingDeleteID` → 新增 \`DeleteConfirmDialog\` **就地覆盖列表**（标题明示账户名 / 文案明示不可恢复 / Esc 与遮罩关闭 / 确认后留在列表 + toast）；② **详情页整体删除**（\`AccountDetailView.swift\` 移除、\`AppRouter.Screen.detail\` 与 \`deleteDialogDelay\` token 清理、\`AccountDetail/\` 目录删除）；③ 左滑操作块「详情｜删除」→「**编辑｜删除**」，编辑页由此获得常驻入口（C4-2 不再依赖详情页）；④ 顺带修复首帧展开态不一致（\`SwipeableAccountRow.onAppear\` 对齐 \`isOpen\`）；⑤ 调试参数 \`--debug-detail*\` 替换为 \`--debug-delete-dialog\`，新增 \`--debug-open-row\`；155 测试全绿；截图验证操作块与就地弹窗 |
 
 ---
 

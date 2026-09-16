@@ -32,8 +32,10 @@
 
 **产品定位**：macOS 原生 TOTP 验证器，400×700pt 竖向窄窗，仅深色，对标 Google Authenticator 的操作心智。
 
-**P0 交付物（8 项）**
-验证码列表 · 点按复制 · 左滑操作（详情｜删除）· 添加账户（**图片导入** + 手动）· 账户详情 · 删除确认 · TOTP 引擎与倒计时 · 搜索
+**P0 交付物（7 项）**
+验证码列表 · 点按复制 · 左滑操作（**编辑｜删除**）· 添加账户（**图片导入** + 手动）· 删除确认（就地）· TOTP 引擎与倒计时 · 搜索
+
+> v1.8 变更：原「账户详情」页移除（用户实测决策，PRD §7.5）；删除确认由「详情页内弹窗」改为**列表就地弹窗**（`DeleteConfirmDialog`）。
 
 **P1**：触控板双指横滑、全局快捷键、编辑账户、导入导出/备份、剪贴板自动清除
 **P2**：菜单栏常驻、iCloud 同步、生物识别锁定、多主题
@@ -87,7 +89,7 @@
 ```
 窗口外壳        NSWindow 400×700 (固定)  │  自绘标题栏 52pt (hiddenTitleBar + 交通灯)
                       ↓
-功能屏 · P0     验证码列表  │  添加账户(导入图片/手动)  │  详情 / 删除确认
+功能屏 · P0     验证码列表  │  添加账户(导入图片/手动)  │  编辑 / 删除确认(覆盖列表)
                       ↓
 状态与时钟      AccountStore (@Observable)  │  单一时钟源 30Hz  │  行展开状态(单值→互斥)
                       ↓
@@ -103,7 +105,7 @@
 | 取舍 | 决定 | 理由 |
 |---|---|---|
 | 时间源 | 全局**一个**时钟源，`progress` 向下传参 | 每行自持 Timer → 7 个 Timer 漂移 + 违反 P-1 |
-| 状态管理 | `@Observable` 单一 `AccountStore` | 列表/详情/弹窗共享同一份数据，避免多源不一致 |
+| 状态管理 | `@Observable` 单一 `AccountStore` | 列表/编辑/弹窗共享同一份数据，避免多源不一致 |
 | 行展开状态 | `openedRowID: Account.ID?`（单值） | R9「同时最多一行展开」由类型天然保证，无需手动收敛 |
 | 密钥形态 | 全程 `Data`，不出 `KeychainStore` | 降低进入崩溃报告/日志的概率 |
 
@@ -167,7 +169,7 @@
 - 30Hz 而非屏幕刷新率：视觉上已足够平滑，且是满足 P-1（CPU < 1%）的主要手段
 - 环用 `Circle().trim(from: 0, to: progress).stroke(...)`（替代 Demo 的 `strokeDashoffset` 换算），必要时下沉到 `Canvas`
 - 验证码文本只在 `counter` 变化时（每 30s 一次）重算并更新，**不参与每帧重算** → 满足 T5「跨周期刷新无闪烁」
-- T4 告警态：`remaining ≤ 5` 时，多行**各自独立**判定；环进度 `#F28B82`、轨道 `#3A2B2B`（列表小环轨道为 `#3A2B2B`，详情大环轨道为 `#3A3F45`，两者不同，注意别混）
+- T4 告警态：`remaining ≤ 5` 时，多行**各自独立**判定；环进度 `#F28B82`、轨道 `#3A2B2B`（v1.8 起仅剩列表小环；原详情大环 `#3A3F45` 随详情页移除，Token 保留备用）
 - 性能验收：7 环稳态下用 Instruments（Time Profiler + Core Animation）出 CPU% / RSS / 线程数表格
 
 ### 4.5 左滑手势状态机（R1–R11 映射）
@@ -180,13 +182,13 @@
 | R4 拖拽判定 | `|dx| > 8 且 |dx| > |dy|` 才判定为横向拖拽，否则视为点按 |
 | R5 已展开行点按 | 仅收起，**不复制、不跳转** |
 | R6 吞掉拖拽后的 click | `suppressTap` 标志；**本卡最高风险项**，需回归验证 |
-| R7 点「详情」 | 先 `current` 赋值 + 视图数据就绪，再切屏；行复位 |
-| R8 点「删除」 | 同上，切屏后将弹窗延迟 **260ms** 弹出 |
+| R7 点「编辑」 | `store.selectedAccountID` 赋值 + 切屏 `.editAccount`；行复位 |
+| R8 点「删除」 | 置 `router.pendingDeleteID`，**不切屏**、立即弹出就地确认（v1.8：原 260ms 延迟切屏弹窗取消） |
 | R9 单行互斥 | `openedRowID` 单值天然互斥；切非列表屏时置 `nil` |
 | R10 拖拽中 | 关闭位移过渡（跟手），释放后恢复；禁止文本选中；竖向滚动不受影响 |
 | R11 悬停 | 行底 `#232528`，行末浮现 16px 复制图标；图标点击同样复制且不冒泡 |
 
-**操作块样式**：高 76（与行同高）、宽 72、圆角 10、间距 8；「详情」底 `#2E3237` 字 `#E9EBED`，「删除」底 `#E5484D` 字白。行底色**必须不透明**（`#1B1C1E`），否则操作块会透出。
+**操作块样式**：高 76（与行同高）、宽 72、圆角 10、间距 8；「编辑」底 `#2E3237` 字 `#E9EBED`，「删除」底 `#E5484D` 字白。行底色**必须不透明**（`#1B1C1E`），否则操作块会透出。
 
 **实现路线**：先用纯 SwiftUI（`DragGesture(minimumDistance: 8)` + 状态机 + suppress 标志）；若实测存在偶发误触，升级为 `NSViewRepresentable` 包 `NSPanGestureRecognizer`，把 tap 判定收回 AppKit 层，规避 SwiftUI 手势竞争。
 
@@ -219,7 +221,7 @@
 | 窗口标题 | Noto Sans SC 13 / Medium | `.system(size: 13, weight: .medium)` |
 | 账户名（列表） | Noto Sans SC 15 / SemiBold | `.system(size: 15, weight: .semibold)` |
 | 验证码（列表） | JetBrains Mono 22 / Medium，字距 1.5 | `.system(size: 22, weight: .medium, design: .monospaced)` + `.monospacedDigit()` |
-| 验证码（详情） | JetBrains Mono 28 / Medium，字距 1 | 同上，size 28 |
+| ~~验证码（详情）~~ | ~~JetBrains Mono 28 / Medium~~ | v1.8 随详情页移除 |
 | 验证码（预览） | JetBrains Mono 20 / Medium，字距 1.5 | 同上，size 20 |
 
 - `.monospacedDigit()` 是 AC「数字变化时列宽不跳动」的直接保障，不能只靠等宽字体
@@ -241,9 +243,9 @@
 │  ├─ App/                      # @main、Scene、WindowConfigurator
 │  ├─ Features/
 │  │  ├─ AccountList/           # 列表 + 行 + 左滑
-│  │  ├─ AddAccount/            # 导入图片 + 手动
-│  │  ├─ AccountDetail/
-│  │  └─ DeleteConfirm/
+│  │  ├─ AddAccount/            # 导入图片 + 手动 + 编辑（复用表单）
+│  │  └─ Backup/                # 备份导出/导入 + GA 迁移码导出
+│  │      （详情页 v1.8 移除；删除确认弹窗为 DesignSystem/Components/ConfirmDialog）
 │  ├─ State/                    # AccountStore、ClockTicker、RowExpansionState
 │  ├─ Services/                 # TOTPEngine、KeychainStore、Clipboard、QRImageDecoder、OTPAuthURI
 │  ├─ Domain/                   # Account、OTPParameters
@@ -274,8 +276,8 @@
 | C2-4 | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5） | 与 Demo 并排比对逐秒一致 |
 | C2-5 | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 | 密钥变更即刷新预览 |
 | C2-6 | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填（v1.1 已移除摄像头） | 能解码并预填到手动输入页；E9/E10/E11 异常路径均有提示；Info.plist 无 `NSCameraUsageDescription` |
-| C2-7 | 详情页：身份区 + 168 大环 + 参数卡 + 操作区 | 参数与账户一致 |
-| C2-8 | 删除确认弹窗（FR-06） | 必经二次确认，确认后回列表 |
+| ~~C2-7~~ | ~~详情页：身份区 + 168 大环 + 参数卡 + 操作区~~ | **v1.8 移除**（用户实测决策；参数核对改由「左滑 → 编辑」承担） |
+| C2-8 | 删除确认弹窗（FR-06，**就地覆盖列表**） | 必经二次确认；确认后留在列表、列表同步减少 |
 | **阶段 3 · 验收与交付** | | |
 | C3-1 | 逐像素比对（行高/字号/间距/圆角，对照 `index.html`） | 差异项列表 + 处置结论 |
 | C3-2 | 性能实测（7 环 CPU / RSS / 线程） | 出对比表格，CPU < 1% |
