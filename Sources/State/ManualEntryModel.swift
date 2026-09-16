@@ -18,6 +18,13 @@ final class AppRouter {
     var screen: Screen = .list
     /// C2-8：删除确认弹窗（覆盖详情页）
     var showsDeleteDialog = false
+    /// C4-3：备份导出/导入弹窗
+    var backupSheet: BackupSheet?
+
+    enum BackupSheet: Equatable {
+        case export
+        case importBackup
+    }
 }
 
 /// 手动输入页的表单状态机（PRD §7.4 手动输入）

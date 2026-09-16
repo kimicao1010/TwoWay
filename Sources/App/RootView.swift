@@ -14,6 +14,8 @@ struct RootView: View {
     @State private var debugInitialMethod: AddAccountView.Method = .manual
     /// DEBUG：load 失败时把错误码亮在界面上（排查生产 Keychain 路径用）
     @State private var loadErrorText: String?
+    /// 备份弹窗内的错误文案（口令错误 / 文件损坏等，就地提示不静默）
+    @State private var backupSheetError: String?
 
     var body: some View {
         ZStack {
@@ -97,6 +99,9 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: toast.current)
+        .sheet(isPresented: isBackupSheetPresented) {
+            backupSheetContent
+        }
         .frame(minWidth: Token.Metrics.windowWidth, maxWidth: Token.Metrics.windowWidth)
         .frame(minHeight: Token.Metrics.designedContentHeight, maxHeight: .infinity)
         .background(Token.Palette.winBg)
@@ -145,6 +150,13 @@ struct RootView: View {
                 store.selectedAccountID = store.accounts.first?.id
                 router.screen = .editAccount
             }
+            // --debug-backup-export / --debug-backup-import：直开备份弹窗
+            if ProcessInfo.processInfo.arguments.contains("--debug-backup-export") {
+                router.backupSheet = .export
+            }
+            if ProcessInfo.processInfo.arguments.contains("--debug-backup-import") {
+                router.backupSheet = .importBackup
+            }
             // --debug-import-file <path>：启动即模拟「拖入图片解码 → 导入」完整链路
             // （手工回归用：免掉无障碍权限下无法程序化拖放的局限）
             if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--debug-import-file"),
@@ -161,7 +173,27 @@ struct RootView: View {
     private var listScreen: some View {
         VStack(spacing: 0) {
             WindowTitlebar(title: "验证器") {
-                EmptyView()
+                // PRD §7.1：标题栏右侧上下文操作为「更多」（三点）
+                Menu {
+                    Button("导出加密备份…") {
+                        backupSheetError = nil
+                        router.backupSheet = .export
+                    }
+                    Button("从备份导入…") {
+                        backupSheetError = nil
+                        router.backupSheet = .importBackup
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Token.Palette.t2)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("更多")
             }
             Divider1px()
 
@@ -186,6 +218,128 @@ struct RootView: View {
     private func show(_ screen: AppRouter.Screen) {
         store.setOpenedRow(nil)   // R9/E8：离开列表屏时行复位
         router.screen = screen
+    }
+
+    // MARK: 备份（C4-3）
+
+    private var isBackupSheetPresented: Binding<Bool> {
+        Binding(
+            get: { router.backupSheet != nil },
+            set: { presented in
+                if !presented { dismissBackupSheet() }
+            }
+        )
+    }
+
+    @ViewBuilder private var backupSheetContent: some View {
+        switch router.backupSheet {
+        case .export:
+            BackupExportSheet(
+                accountCount: store.accounts.count,
+                errorMessage: $backupSheetError,
+                onCancel: dismissBackupSheet,
+                onExport: exportBackup(password:)
+            )
+        case .importBackup:
+            BackupImportSheet(
+                errorMessage: $backupSheetError,
+                onCancel: dismissBackupSheet,
+                onImport: importBackup(password:)
+            )
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func dismissBackupSheet() {
+        router.backupSheet = nil
+        backupSheetError = nil
+    }
+
+    /// 导出：口令 → PBKDF2 → AES-GCM → 保存面板写盘（0600）
+    private func exportBackup(password: String) {
+        let entries = store.backupEntries()
+        let document = BackupArchive.Document(accounts: entries)
+
+        let data: Data
+        do {
+            data = try BackupArchive.encrypt(document, password: password)
+        } catch {
+            backupSheetError = "导出失败，请重试"
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.title = "导出加密备份"
+        panel.nameFieldStringValue = "2way-backup-\(Self.fileStamp()).2wbackup"
+        panel.begin { response in
+            Task { @MainActor in
+                guard response == .OK, let url = panel.url else { return }   // 取消：留在弹窗
+                do {
+                    try data.write(to: url, options: .atomic)
+                    try? FileManager.default.setAttributes(
+                        [.posixPermissions: 0o600],
+                        ofItemAtPath: url.path
+                    )
+                    dismissBackupSheet()
+                    toast.show("已导出 \(entries.count) 个账户")
+                } catch {
+                    backupSheetError = "写入文件失败，请换一个位置重试"
+                }
+            }
+        }
+    }
+
+    /// 导入：选择文件 → 解密 → 合并（同 id 跳过，幂等）
+    private func importBackup(password: String) {
+        let panel = NSOpenPanel()
+        panel.title = "选择备份文件"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        // 不限文件类型：以文件内的 magic 校验为准（避免动态 UTType 兼容问题）
+        panel.begin { response in
+            Task { @MainActor in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    let data = try Data(contentsOf: url)
+                    let document = try BackupArchive.decrypt(data, password: password)
+                    let result = try store.importBackup(document.accounts)
+                    dismissBackupSheet()
+                    if result.skipped > 0 {
+                        toast.show("已导入 \(result.imported) 个账户（跳过 \(result.skipped) 个已存在）")
+                    } else {
+                        toast.show("已导入 \(result.imported) 个账户")
+                    }
+                } catch let error as BackupArchive.ArchiveError {
+                    backupSheetError = Self.message(for: error)
+                } catch {
+                    backupSheetError = "读取备份文件失败"
+                }
+            }
+        }
+    }
+
+    private static func message(for error: BackupArchive.ArchiveError) -> String {
+        switch error {
+        case .weakPassword(let minimum):
+            "口令至少需要 \(minimum) 位"
+        case .badMagic:
+            "这不是 2way 的备份文件"
+        case .unsupportedVersion(let version):
+            "备份文件版本（\(version)）不受支持，请升级应用"
+        case .wrongPasswordOrCorrupted:
+            "口令错误，或备份文件已损坏"
+        case .malformed:
+            "备份文件已损坏"
+        case .keyDerivationFailed:
+            "密钥派生失败，请重试"
+        }
+    }
+
+    private static func fileStamp() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmm"
+        return formatter.string(from: Date())
     }
 
     /// R7/R8：进入详情。R8 在切屏动画（260ms）后自动弹删除确认（PRD §7.2）

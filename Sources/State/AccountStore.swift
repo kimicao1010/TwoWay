@@ -162,6 +162,61 @@ final class AccountStore {
         return Base32.encode(secret)
     }
 
+    // MARK: - 备份导出 / 导入（C4-3）
+
+    /// 导出用：全部账户 + 密钥（密钥只在内存中流转，S1）
+    ///
+    /// 密钥不可读的账户会被跳过（正常情况下不应发生）。
+    func backupEntries() -> [BackupArchive.Entry] {
+        accounts.compactMap { account in
+            guard let secret = secretCache[account.id] ?? (try? secrets.read(id: account.id).secret) else {
+                return nil
+            }
+            return BackupArchive.Entry(
+                id: account.id,
+                displayName: account.displayName,
+                issuer: account.issuer,
+                parameters: account.parameters,
+                addedAt: account.addedAt,
+                secret: secret
+            )
+        }
+    }
+
+    /// 导入备份：**同 id 已存在则跳过**（幂等；重复导入不产生副本，也不覆盖本地改动）。
+    /// 返回（导入数, 跳过数）供 toast 明示，不静默。
+    @discardableResult
+    func importBackup(_ entries: [BackupArchive.Entry]) throws -> (imported: Int, skipped: Int) {
+        var imported = 0
+        var skipped = 0
+        var didChange = false
+
+        for entry in entries {
+            if accounts.contains(where: { $0.id == entry.id }) {
+                skipped += 1
+                continue
+            }
+            let account = Account(
+                id: entry.id,
+                displayName: entry.displayName,
+                issuer: entry.issuer,
+                parameters: entry.parameters,
+                addedAt: entry.addedAt
+            )
+            try secrets.save(id: account.id, secret: entry.secret, metadataJSON: encoder.encode(account))
+            accounts.append(account)
+            secretCache[account.id] = entry.secret
+            imported += 1
+            didChange = true
+        }
+
+        if didChange {
+            accounts.sort { $0.addedAt > $1.addedAt }   // 与其他入口一致的倒序
+            codeCache = [:]
+        }
+        return (imported, skipped)
+    }
+
     /// PRD FR-06：删除后列表同步减少；E2 删到 0 个时计数归零
     func delete(id: UUID) throws {
         try secrets.delete(id: id)
