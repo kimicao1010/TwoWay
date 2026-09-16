@@ -156,6 +156,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 卡 | 状态 | 内容 | 完成判据 |
 |---|---|---|---|
 | C3-1 | `[x]` | 逐像素比对（对照 `index.html`）—— 处置结论：**接受等价替代清单**（RK3/RK5/RK8/D8 已闭环）：系统圆角 ≈13 vs 12、交通灯 13pt vs 12px、SF Mono vs JetBrains Mono、PingFang SC vs Noto Sans SC、窗口 732（32pt 归列表区）。U12：Demo 第 02 屏仍是 v1.0 摄像头形态，逐像素比对仅覆盖 01/03/04/05 屏语义 | 差异项已列出并全部有决策 ✅ |
+| C3-2b | `[x]` | **性能复核（C4-9）**：区分「窗口可见 / 被遮挡」后重测 —— **可见 ≈ 1–2.6%（4 环），被遮挡 ≈ 0.2%**（此前 0.4% 实为遮挡节流值）。对策：新增 `CodePulse`（换码脉冲）替代列表的 1Hz 刷新（列表不显示秒数，只需在换码时刷新），并把环的 layer 几何改为「无变化不重设」。残余成本主要为**持续动画的每帧合成**，属 T3「连续平滑」的固有代价；P-1「<1%」仅在遮挡态成立，已在 C3-2b 如实记录 |
 | C3-2 | `[x]` | 性能实测（M1 Pro，Release，5 环稳态）—— **初测 36% → 优化后 0.4-0.7%**。根因：SwiftUI `TimelineView(.animation)` 30Hz 全列表失效 + AppKit 全窗口 `layoutIfNeeded`（sample 实测主线程 2/3 在布局引擎）。修复：环改 `CAShapeLayer` + `RingClock` 30Hz 直驱 + 周期级 `CABasicAnimation`（GPU 插值）；码文本秒对齐 1Hz。RSS ≈ 92MB / 4 线程 | CPU < 1% ✅ |
 | C3-3 | `[x]` | 安全自查（D9 修订版）—— wallet.bin 密文无明文特征 ✅ / master.key+wallet.bin 0600、目录 0700（含单测）✅ / Sources 零 print·os_log·Logger·NSLog ✅ / 进程参数无密钥 ✅ / Account.debugDescription 脱敏（单测）✅ | ✅（§4.2 清单按 D9 修订后全勾） |
 | C3-4 | `[x]` | Release：archive → 全组件重签 → DR 校验 → UDZO → 校验 → 挂载实测 —— `dist/2way-0.1.0.dmg`（908K），DR = `identifier "com.kimi.2way" and certificate root H"88f7f892…"`，挂载后签名校验通过 | `dist/2way-*.dmg` 可挂载运行 ✅ |
@@ -197,6 +198,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | **阶段 3 验收交付完成**：C3-1 差异清单全部有决策（等价替代接受）；C3-3 安全自查按 D9 修订全勾（wallet 密文/0600 权限含单测/零日志/进程参数干净）；C3-4 \`dist/2way-0.1.0.dmg\` 打包 + 挂载实测通过，DR 锚定自签证书 |
 | 2026-09-16 | **T5/T6 修复：码文本刷新链路（用户实测反馈）**。现象：环在动、码文本冻结。定位过程：① 单元测试证明 store 真时钟与取码缓存正常（新增 \`AccountStoreRealtimeClockTests\`，period=1s 跨周期必变）；② \`TimelineView(.periodic)\` 与 \`onReceive\`+通知两条刷新路径在真机未触发重算。方案：新增 \`SecondPulse\`（@Observable 全局秒脉冲，由 RingClock 整秒推进），视图读取脉冲建立原生观察依赖 → 整秒重算码文本；环动画 \`beginTime\` 锚定绝对周期边界 → **换码与环重置同刻**。验证：35 秒跨周期截图，4 个码全部刷新 ✅。**方法论教训：验证码刷新必须跨周期（>30s）比对，7 秒间隔的对比结论无效** |
 | 2026-09-16 | **PRD v1.3 + P1 范围收敛（用户决策）**：触控板双指横滑、全局快捷键**不做**（代价/风险与收益不成比例，且全局快捷键的辅助功能授权与 v1.1「缩小权限面」相悖）；P1 收敛为「编辑账户 / 导入导出备份 / 剪贴板自动清除」；S1 条款按 D9 重写为「加密落盘」，S4 提前到本期 |
+| 2026-09-16 | **C4-9 刷新频率优化 + 性能数据复核**：① 新增 `CodePulse`（环换码时触发）替代列表的 `SecondPulse` 1Hz 刷新 —— 列表只显示码不显示秒数，只需在换码时重算；② `RingLayerView.updateLayerGeometry()` 加「无变化不重设」守卫，避免每次 SwiftUI 刷新都重设 layer path/frame；③ 复核性能并如实记录：**可见 1–2.6% / 遮挡 0.2%**（此前 0.4% 是遮挡态），残余成本为环持续动画的每帧合成。换码刷新经 34 秒跨周期截图验证仍正确 |
 | 2026-09-16 | **C4-8 复制无提示修复**：`ToastCenter` 由 `ObservableObject + @Published` 改为 `@Observable` —— 根因是 `@State` 持有 `ObservableObject` 不建立订阅，导致 toast 状态变化不触发重绘（此前从未渲染过 toast）。修复后复制即时弹出「已复制」。应用名/Bundle ID 按用户要求保持不变 |
 | 2026-09-16 | **C4-7 列表交互与样式（PRD v1.5）**：标题「TwoWay 密钥生成器」；移除悬停复制图标（复制唯一入口 = 单击整行，toast「已复制」）；行标题改为「发行方：账户名」单行（次要色发行方 + 主色账户名） |
 | 2026-09-16 | **D10 移除系统窗口 chrome + C4-5 五项修复**：窗口不再显示关闭/最小化/缩放按钮（`isHidden + alpha 0 + disabled`，标题栏透明、无系统标题文字），「⋯」菜单加「退出 2way」，窗口拖动改由自绘标题栏 `WindowDragArea`（`performDrag`）承担，标题栏回收 52pt 交通灯预留位；PRD → v1.4（G-03 改写）。同轮修复：详情页返回按钮/Esc、环尺寸 bug（shape layer 零 frame 致旋转平移出视图）、列表环归位、行内显示发行方、GA 兼容导出（迁移码 PNG） |

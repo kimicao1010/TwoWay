@@ -113,6 +113,23 @@ struct SecondPulseReader<Content: View>: View {
     }
 }
 
+/// 全局「换码」脉冲：任一账户跨周期（码变化）时 +1，由各环的 tick 触发。
+///
+/// 用途：**列表页只需在码变化时刷新**（列表不显示剩余秒数），
+/// 用它替代 1Hz 秒脉冲可把列表重绘频率从 1 次/秒降到 1 次/周期
+/// （实测可见窗口下的 CPU 主要由这每秒一次的整体重绘贡献）。
+@MainActor
+@Observable
+final class CodePulse {
+    static let shared = CodePulse()
+
+    private(set) var value = 0
+
+    func bump() {
+        value &+= 1
+    }
+}
+
 // MARK: - CALayer 环视图
 
 /// 轨道 + 进度两个 CAShapeLayer；`tick()` 由 `RingClock` 30Hz 驱动。
@@ -129,6 +146,9 @@ final class RingLayerView: NSView {
     private var ringSize: CGFloat = 28
     private var isWarning = false
     private var lastCounter: UInt64?
+    /// 上次已应用的几何（避免重复设置 layer path/frame）
+    private var appliedBounds: CGRect = .zero
+    private var appliedSide: CGFloat = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -208,13 +228,20 @@ final class RingLayerView: NSView {
 
     /// 按 `ringSize` 精确计算路径并居中放置。
     ///
-    /// ⚠️ 关键：子 layer 的 `frame` 必须与视图 bounds 一致。
+    /// ⚠️ 关键 1：子 layer 的 `frame` 必须与视图 bounds 一致。
     /// 早先没设 frame（零尺寸）→ anchorPoint 落在 (0,0)，而为了「起点 12 点钟」
     /// 做的 `-90°` 旋转是绕 anchorPoint 进行的，于是整个圆被平移到视图之外
     /// （表现为巨大/错位的圆压住相邻内容）。
+    ///
+    /// ⚠️ 关键 2：几何无变化时**不重设** —— `configure` 会在每次 SwiftUI 刷新时调用
+    /// （现在每秒都会刷新码文本），无脑重设会带来每秒无谓的 CA 提交（实测 CPU 上升）。
     private func updateLayerGeometry() {
         guard bounds.width > 0, bounds.height > 0 else { return }
         let side = max(ringSize - strokeWidth, 1)
+        guard bounds != appliedBounds || side != appliedSide else { return }
+        appliedBounds = bounds
+        appliedSide = side
+
         let rect = CGRect(
             x: bounds.midX - side / 2,
             y: bounds.midY - side / 2,
@@ -242,6 +269,8 @@ final class RingLayerView: NSView {
 
         if state.counter != lastCounter {
             lastCounter = state.counter
+            // 码发生变化：通知列表重算验证码文本（列表只需在换码时刷新，不必每秒）
+            CodePulse.shared.bump()
             let elapsed = date.timeIntervalSince1970
                 .truncatingRemainder(dividingBy: effectivePeriod)
 
