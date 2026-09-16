@@ -14,9 +14,20 @@ struct RootView: View {
             }
             Divider1px()
 
-            AccountListView(store: store) {
-                // C2-5 / C2-6（添加账户）尚未实现，先占位
-            }
+            AccountListView(
+                store: store,
+                onAdd: {
+                    // C2-5 / C2-6（添加账户）尚未实现，先占位
+                },
+                onDetail: { account in
+                    // R7：切屏到详情页在 C2-7 接入，此处先记录选中项
+                    store.selectedAccountID = account.id
+                },
+                onDelete: { account in
+                    // R8：切屏 + 260ms 弹删除确认在 C2-8 接入，此处先记录选中项
+                    store.selectedAccountID = account.id
+                }
+            )
         }
         .frame(
             width: Token.Metrics.windowWidth,

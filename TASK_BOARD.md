@@ -17,19 +17,19 @@
 |---|---|---|---|---|
 | C0-1 | `[x]` | `project.yml` → App target，最低 macOS 14.0 | `xcodegen generate` 成功、空窗可编译 | `8c3681d` |
 | C0-1b | `[x]` | 创建自签代码签名证书并接入构建（§9.3） | `codesign -d -r- App.app` 输出**不含 `cdhash H"..."`** → 实测 DR = `identifier "com.kimi.2way" and certificate root = H"88f7f892…"` ✅ | 本次 |
-| C0-2 | `[~]` | `Tokens.swift`（§8 全量）+ 基础组件 | 组件可独立预览，取值与 §8 逐项对齐 | `8c3681d` |
-| C0-3 | `[x]` | `spike-window`：窗口 400×700 + hiddenTitleBar + 圆角/交通灯实测 | 出截图 + 圆角实现方式结论 → **RK7 遗留：窗口高度 732 待拍板** | `6a69e99` |
+| C0-2 | `[x]` | `Tokens.swift`（§8 全量）+ 基础组件 | 组件可独立预览，取值与 §8 逐项对齐 | `8c3681d`、`1d8bde2` |
+| C0-3 | `[x]` | `spike-window`：窗口 400×700 + hiddenTitleBar + 圆角/交通灯实测 | 出截图 + 圆角实现方式结论 → RK7 已按 D8 关闭 | `6a69e99` |
 
 **C0-2 明细**
 
 - [x] `Tokens.swift` —— §8 全量颜色 / 尺寸 / 动效 / 字体（含 Demo `:root` 补充的 7 项）
 - [x] `WindowTitlebar` + `Divider1px`
-- [ ] `PrimaryButton`（高 44 / 圆角 12 / 强调色底）
-- [ ] `SecondaryButton`（高 40 / 描边 `--border`）
-- [ ] `SegmentedControl`（容器 34 / 圆角 9 / 段 28 / 圆角 7 / 选中 `--seg-active`）
-- [ ] `CountdownRing`（小环 28/描边 3，大环 168/描边 5；告警态切换）
-- [ ] `Toast`（底部 44pt / 停留 1.8s）
-- [ ] `TokenTextField`（高 42 / 圆角 10）
+- [x] `PrimaryButton`（高 44 / 圆角 12 / 强调色底）
+- [x] `SecondaryButton`（高 40 / 描边 `--border`）
+- [x] `SegmentedControl`（容器 34 / 圆角 9 / 段 28 / 圆角 7 / 选中 `--seg-active`）
+- [x] `CountdownRing`（小环 28/描边 3，大环 168/描边 5；告警态切换）
+- [x] `Toast`（底部 44pt / 停留 1.8s）
+- [x] `TokenTextField`（高 42 / 圆角 10）
 
 **C0-3 结论（已实测）**
 
@@ -67,14 +67,39 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | 卡 | 状态 | 内容 | 完成判据 |
 |---|---|---|---|
-| C2-1 | `[ ]` | 列表页：搜索（FR-03）、计数、悬停、空态（E2/E7） | 输入即过滤，计数同步 |
-| **C2-2** | `[ ]` | **`spike-swipe`：R1–R11 全量 + 手工回归清单** | **11 条规则逐条通过，含 R6 吞 click** |
-| C2-3 | `[ ]` | 复制 + toast + E1 失败路径 | 点按 1 步完成；失败有提示，不静默 |
-| C2-4 | `[ ]` | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5） | 与 `index.html` 并排逐秒一致 |
+| C2-1 | `[x]` | 列表页：搜索（FR-03）、计数、悬停、空态（E2/E7） | 输入即过滤，计数同步 |
+| **C2-2** | `[~]` | **`spike-swipe`：R1–R11 全量 + 手工回归清单** —— 状态机 `SwipeRowModel`（State 层，8 个单测）+ `SwipeableAccountRow`（手势 + 操作块）已落地 | **逻辑级单测全绿；R1–R11 手工回归清单待执行（RK1 的真实手势验证）** |
+| C2-3 | `[x]` | 复制 + toast + E1 失败路径 | 随 C2-1 落地；R1 闪烁 650ms 补齐于 C2-2 |
+| C2-4 | `[~]` | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5）—— 列表小环 + 30Hz 单时钟源已随 C2-1 落地，T4 阈值有单测 | 剩：与 `index.html` 并排逐秒一致（手工） |
 | C2-5 | `[ ]` | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 | 密钥变更即刷新预览 |
 | C2-6 | `[ ]` | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填（v1.1 已移除摄像头） | 能解码并预填到手动输入页；E9/E10/E11 异常路径均有提示；Info.plist 无 `NSCameraUsageDescription` |
 | C2-7 | `[ ]` | 详情页：身份区 + 168 大环 + 参数卡 + 操作区 | 参数与账户一致 |
 | C2-8 | `[ ]` | 删除确认弹窗（FR-06） | 必经二次确认；确认后回列表 |
+
+**C2-2 明细（R1–R11 → 实现映射）**
+
+| 规则 | 实现 |
+|---|---|
+| R1 点按复制 + 底色闪 `#2E3237` 650ms | `AccountRowView.flashCopied()`；复制失败不闪烁（E1 仅 toast） |
+| R2 左滑露出操作块，位移 `[-160, 0]` | `SwipeLogic.clamp`；右滑归 0，不错位 |
+| R3 释放吸附/回弹（阈值 72 = 0.45×160） | `SwipeLogic.settle`；曲线 `timingCurve(.2,.8,.2,1, 0.3s)` |
+| R4 横向 >8px 且大于纵向才拖拽 | `SwipeLogic.isHorizontalDrag`；竖向滚动不受影响 |
+| R5 展开行点按仅收起 | `SwipeableAccountRow.handleTap` |
+| R6 拖拽后 click 被吞 | `SwipeRowModel.shouldSuppressTap()`（0.15s 抑制窗口）+ SwiftUI DragGesture minimumDistance 天然不触发 tap，双保险 |
+| R7 点「详情」→ 详情页 | `onDetail` 回调已接 RootView（切屏在 C2-7 接入） |
+| R8 点「删除」→ 详情页 + 自动弹确认 | `onDelete` 回调已接 RootView（260ms 弹窗在 C2-8 接入） |
+| R9 同时最多一行展开 | `store.openedRowID` 单值互斥；本行确认拖拽即收起其他行（对齐 Demo pointerdown 行为） |
+| R10 拖拽中关过渡跟手、禁止文本选中 | `.animation(isDragging ? nil : settle)`；`textSelection(.disabled)` |
+| R11 悬停浮现复制图标、点击不冒泡 | 复制图标为独立 Button（吞掉点击），行底 hover `#232528` |
+
+**C2-2 手工回归清单（待执行）**
+
+- [ ] 鼠标左滑拖拽跟手，释放按阈值吸附/回弹，动画曲线无跳变
+- [ ] 拖拽后立即点按，不触发复制（R6，RK1 高风险项）
+- [ ] 竖向滚动列表时不触发行位移；右滑不错位
+- [ ] 展开行 A 后再拖行 B：A 收起、B 可展开；展开行点按仅收起不复制
+- [ ] 点「详情」「删除」行复位；悬停复制图标点击复制且不触发两次 toast
+- [ ] 复制后行闪 `#2E3237` 650ms；告警态（≤5s）下复制照常（E6）
 
 ---
 
@@ -111,6 +136,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 2026-09-16 | 项目立项；阶段 0 启动；PRD v1.0 |
 | 2026-09-16 | **C2-1 列表页落地**：\`AccountStore\`（加载/搜索/计数/置顶/取码缓存）+ \`AccountListView\`（搜索/行/悬停/点按复制/Toast）；\`SecretStoring\` 协议抽象出可注入的存储层；窗口四角圆角由 \`clipShape\` 兜底（SwiftUI 恒定给窗口加 32pt 隐形标题栏，底边落在窗口中部、系统不在那里画圆角）
 | 2026-09-16 | **PRD v1.1：移除摄像头扫码，添加账户改为仅「图片导入 + 手动输入」**。页面 02 由「扫描二维码」改为「导入图片」；取景框/取景括号/扫描线动画废弃；不再申请摄像头权限。影响：C2-6 重定义、RK2 关闭并新增 RK2b、D1 依据更换（结论不变）、D7 新增 |
+| 2026-09-16 | **C2-2 左滑实现落地**：\`SwipeRowState\`（R2/R3/R4/R6 纯逻辑 + 8 个单测）+ \`SwipeableAccountRow\`（操作块/互斥/复制闪烁）；R1 闪烁 650ms 补齐；R7/R8 回调接至 RootView（切屏分别等 C2-7/C2-8）；测试 89 → 97 全绿。**R1–R11 手工回归清单待执行** |
 
 ---
 
@@ -118,7 +144,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | # | 风险 | 等级 | 应对 |
 |---|---|---|---|
-| RK1 | 左滑 R6「拖拽后补发的 click 被吞掉」在 SwiftUI 下可能偶发失效 | 高 | C2-2 独立成卡 + 手工回归清单；备选 `NSPanGestureRecognizer` |
+| RK1 | 左滑 R6「拖拽后补发的 click 被吞掉」在 SwiftUI 下可能偶发失效 | 高 | 已实现双保险（DragGesture minimumDistance + 0.15s 抑制窗口）+ 8 个单测；**待手工回归确认真实手势下行为**；仍保留 `NSPanGestureRecognizer` 备选 |
 | RK2 | ~~`AVCaptureMetadataOutput` 运行时对 `.qr` 的支持依赖设备~~ | **已关闭** | v1.1 移除摄像头，不适用 |
 | RK2b | Vision 成为**唯一**解码路径，无兜底；对低质量 / 畸变 / 缩放图片的识别率未知 | 中 | C2-6 用真实截图样本集实测（手机截图、裁剪、含透视畸变）；必要时加 `CIFilter` 预处理 |
 | RK3 | 系统窗口圆角与 PRD 12px 存在差值 | 中 | C0-3 出实测差值 |
