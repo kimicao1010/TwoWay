@@ -16,7 +16,7 @@
 | C0-1 | `[x]` | `project.yml` → App target，最低 macOS 14.0 | `xcodegen generate` 成功、空窗可编译 | `8c3681d` |
 | C0-1b | `[x]` | 创建自签代码签名证书并接入构建（§9.3） | `codesign -d -r- App.app` 输出**不含 `cdhash H"..."`** → 实测 DR = `identifier "com.kimi.2way" and certificate root = H"88f7f892…"` ✅ | 本次 |
 | C0-2 | `[~]` | `Tokens.swift`（§8 全量）+ 基础组件 | 组件可独立预览，取值与 §8 逐项对齐 | `8c3681d` |
-| C0-3 | `[ ]` | `spike-window`：窗口 400×700 + hiddenTitleBar + 圆角/交通灯实测 | 出截图 + 圆角实现方式结论 | — |
+| C0-3 | `[x]` | `spike-window`：窗口 400×700 + hiddenTitleBar + 圆角/交通灯实测 | 出截图 + 圆角实现方式结论 → **RK7 遗留：窗口高度 732 待拍板** | `6a69e99` |
 
 **C0-2 明细**
 
@@ -29,13 +29,15 @@
 - [ ] `Toast`（底部 44pt / 停留 1.8s）
 - [ ] `TokenTextField`（高 42 / 圆角 10）
 
-**C0-3 待办**
+**C0-3 结论（已实测）**
 
-- [ ] 实测系统窗口圆角 vs PRD 12px 的实际差值
-- [ ] 确认交通灯位置是否需用 `NSWindow.standardWindowButton(_:)` 微调
-- [ ] 确认 `.ignoresSafeArea()` 下 52pt 标题栏与交通灯的垂直对齐
-- [ ] 关闭 zoom 按钮（固定尺寸窗口）
-- [ ] 出截图存档到 `docs/spike/window/`
+- [x] 系统窗口圆角 **r ≈ 12~13px**（左上/右上最小二乘拟合一致）vs PRD 12px → 差 ≤1px，可接受
+- [x] 交通灯几何：close 中心 (15,15)pt、直径 ≈13pt、与 yellow 中心距 23pt（PRD 写 20pt，差 ≤3pt，可接受）
+- [x] 交通灯让位：`standardWindowButton(.zoomButton)` 淡出禁用成功（固定尺寸窗口）
+- [x] `.hiddenTitleBar` 必须补 `.fullSizeContentView`，否则内容下方空 32pt
+- [x] `makeNSView` 里 async 取 `view.window` 拿不到 → 必须用 `viewDidMoveToWindow`
+- [x] **已拍板：接受 400×732**（决策 D8 / PRD v1.2），32pt 归列表区
+- [ ] 截图存档（脚本 `scripts/measure-window.swift` / `fit-corner.swift` / `bbox.swift` 可复跑）
 
 ---
 
