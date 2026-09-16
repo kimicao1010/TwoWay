@@ -65,6 +65,10 @@ struct TokenTextField: View {
     var placeholder: String = ""
     var monospaced = false
     var helpText: String? = nil
+    /// E4 等错误提示（危险色，显示在 help 之下）
+    var errorMessage: String? = nil
+    /// 输入框尾部图标（密钥字段的钥匙图标）
+    var trailingSystemImage: String? = nil
 
     @FocusState private var focused: Bool
 
@@ -85,6 +89,12 @@ struct TokenTextField: View {
                     .kerning(monospaced ? 0.5 : 0)
                     .focused($focused)
                     .disableAutocorrection(true)
+
+                if let trailingSystemImage {
+                    Image(systemName: trailingSystemImage)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(Token.Palette.t4)
+                }
             }
             .padding(.horizontal, 12)
             .frame(height: Token.Metrics.inputHeight)
@@ -94,6 +104,12 @@ struct TokenTextField: View {
                     .stroke(focused ? Token.Palette.t2 : Token.Palette.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: Token.Metrics.inputRadius))
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(Token.Typography.caption)
+                    .foregroundStyle(Token.Palette.dangerText)
+            }
 
             if let helpText {
                 Text(helpText)

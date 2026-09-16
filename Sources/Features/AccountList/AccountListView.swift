@@ -6,13 +6,13 @@ import SwiftUI
 /// `SwipeableAccountRow`（手势与操作块 UI）。
 struct AccountListView: View {
     @Bindable var store: AccountStore
+    /// 共享 Toast（复制反馈 / 添加成功提示等，渲染在 RootView 层）
+    let toast: ToastCenter
     var onAdd: () -> Void
     /// R7：左滑「详情」→ 进入详情页（切屏在 C2-7 接入）
     var onDetail: (Account) -> Void
     /// R8：左滑「删除」→ 进入详情页并自动弹删除确认（260ms 弹窗在 C2-8 接入）
     var onDelete: (Account) -> Void
-
-    @State private var toast = ToastCenter()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,14 +33,6 @@ struct AccountListView: View {
 
             footer
         }
-        .overlay(alignment: .bottom) {
-            if let toast = toast.current {
-                ToastView(message: toast.message)
-                    .padding(.bottom, 44)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: toast.current)
     }
 
     // MARK: 搜索（FR-03）
