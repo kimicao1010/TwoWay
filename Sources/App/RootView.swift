@@ -173,7 +173,7 @@ struct RootView: View {
 
     private var listScreen: some View {
         VStack(spacing: 0) {
-            WindowTitlebar(title: "验证器") {
+            WindowTitlebar(title: "TwoWay 密钥生成器") {
                 // PRD §7.1：标题栏右侧上下文操作为「更多」（三点）
                 Menu {
                     Button("导出加密备份…") {

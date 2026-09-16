@@ -90,7 +90,7 @@ struct AccountListView: View {
     private func copy(_ account: Account) -> Bool {
         guard let code = store.code(for: account.id) else { return false }
         if ClipboardGuard.shared.copy(code) {
-            toast.show("验证码已复制")
+            toast.show("已复制")   // R1：底部反馈
             return true
         } else {
             toast.show("复制失败，请手动复制")   // E1：不静默失败
@@ -276,24 +276,31 @@ private struct AccountRowView: View {
         return Token.Palette.winBg
     }
 
+    /// 账户标题：`发行方：账户名`；发行方缺失或与名称相同时只显示名称
+    private var titleLine: Text {
+        let name = Text(account.displayName)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Token.Palette.t1)
+
+        guard let issuer = account.issuer,
+              !issuer.isEmpty,
+              issuer != account.displayName
+        else { return name }
+
+        return Text(issuer)
+            .font(.system(size: 15, weight: .regular))
+            .foregroundStyle(Token.Palette.t2)
+            + Text("：")
+            .font(.system(size: 15))
+            .foregroundStyle(Token.Palette.t3)
+            + name
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                // 发行方（PRD FR-03 搜索字段之一；与名称相同则不必重复展示）
-                if let issuer = account.issuer,
-                   !issuer.isEmpty,
-                   issuer != account.displayName {
-                    Text(issuer)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Token.Palette.t3)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .textSelection(.disabled)
-                }
-
-                Text(account.displayName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Token.Palette.t1)
+            VStack(alignment: .leading, spacing: 4) {
+                // 账户标题：`发行方：账户名`（发行方次要色、账户名主色；无发行方时只显示名称）
+                titleLine
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .textSelection(.disabled)   // R10：禁止文本选中
@@ -308,19 +315,6 @@ private struct AccountRowView: View {
             }
 
             Spacer(minLength: 0)
-
-            // R11：悬停才浮现复制图标；点击同样复制且不冒泡（Button 吞掉点击）
-            if hovering {
-                Button {
-                    if onTap() { flashCopied() }
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Token.Palette.accent)
-                }
-                .buttonStyle(.plain)
-                .transition(.opacity)
-            }
 
             CountdownRing(
                 period: account.parameters.period,
