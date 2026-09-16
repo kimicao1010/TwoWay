@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 /// 分段控件（PRD §7.4：容器 34 / 圆角 9 / 段 28 / 圆角 7 / 选中 `--seg-active`）
@@ -54,14 +55,19 @@ struct ToastView: View {
 }
 
 /// Toast 的状态机 —— 独立成类型是为了可注入时间做单测（C2-3 会用到）
+///
+/// ⚠️ 必须是 `@Observable`（而不是 `ObservableObject` + `@Published`）：
+/// 持有方 `RootView` 用 `@State` 保存它，而 `@State` **不会**订阅 `ObservableObject`
+/// 的变化 —— 那样 toast 状态变了界面也不刷新（复制后「无提示」的根因）。
 @MainActor
-final class ToastCenter: ObservableObject {
+@Observable
+final class ToastCenter {
     struct Toast: Equatable {
         let id = UUID()
         let message: String
     }
 
-    @Published private(set) var current: Toast?
+    private(set) var current: Toast?
 
     /// 停留时长（Demo 实测 1.8s）
     private let duration: TimeInterval
