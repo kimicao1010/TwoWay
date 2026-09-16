@@ -11,7 +11,8 @@ final class AppRouter {
     enum Screen: Equatable {
         case list
         case addAccount
-        case detail   // C2-7：依赖 store.selectedAccountID
+        case detail        // C2-7：依赖 store.selectedAccountID
+        case editAccount   // P1 C4-2：编辑选中账户（依赖 store.selectedAccountID）
     }
 
     var screen: Screen = .list
@@ -26,6 +27,9 @@ final class AppRouter {
 @MainActor
 @Observable
 final class ManualEntryModel {
+
+    /// 编辑模式（P1 C4-2）：非 nil 时提交走 `AccountStore.update` 而非 `add`
+    private(set) var editingAccountID: UUID?
 
     var displayName = ""
     /// 发行方（可选）。C2-6 二维码解码成功后预填（PRD：预填发行方）
@@ -67,21 +71,44 @@ final class ManualEntryModel {
 
     // MARK: 提交
 
-    /// 写入账户，返回用于 toast 的账户名（成功后自清空表单）
+    /// 新增或保存编辑，返回用于 toast 的账户名（成功后自清空表单）
     @discardableResult
     func submit(into store: AccountStore) throws -> String {
         let name = resolvedName
         let issuer = self.issuer?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedIssuer = issuer?.isEmpty == true ? nil : issuer
         let params = try OTPParameters(algorithm: algorithm, digits: digits, period: period)
-        try store.add(
-            displayName: displayName,
-            issuer: issuer?.isEmpty == true ? nil : issuer,
-            secretBase32: secretRaw,
-            parameters: params
-        )
+
+        if let editingAccountID {
+            try store.update(
+                id: editingAccountID,
+                displayName: displayName,
+                issuer: normalizedIssuer,
+                secretBase32: secretRaw,
+                parameters: params
+            )
+        } else {
+            try store.add(
+                displayName: displayName,
+                issuer: normalizedIssuer,
+                secretBase32: secretRaw,
+                parameters: params
+            )
+        }
         reset()
         return name
+    }
+
+    /// 编辑页预填（P1 C4-2）：表单内容 = 账户现值，提交走 update
+    func prefillForEditing(account: Account, secretBase32: String) {
+        displayName = account.displayName
+        issuer = account.issuer
+        secretRaw = secretBase32
+        algorithm = account.parameters.algorithm
+        digits = account.parameters.digits
+        period = account.parameters.period
+        editingAccountID = account.id
     }
 
     /// C2-6：二维码解码成功后预填全部字段（PRD §7.4：预填账户名 / 发行方 / 密钥 / 高级参数）
@@ -96,6 +123,7 @@ final class ManualEntryModel {
 
     /// 取消 / 成功后清空
     func reset() {
+        editingAccountID = nil
         displayName = ""
         issuer = nil
         secretRaw = ""

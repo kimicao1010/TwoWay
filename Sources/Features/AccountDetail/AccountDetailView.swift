@@ -8,6 +8,8 @@ struct AccountDetailView: View {
     var showsDeleteDialog: Bool
     var onRequestDeleteDialog: () -> Void
     var onCancelDelete: () -> Void
+    /// P1 C4-2：进入编辑页
+    var onRequestEdit: () -> Void
     /// 确认删除后回调（回列表 + toast「已删除「名称」」）
     var onDeleted: (String) -> Void
 
@@ -25,10 +27,8 @@ struct AccountDetailView: View {
         VStack(spacing: 0) {
             WindowTitlebar(title: "账户详情") {
                 HStack(spacing: 14) {
-                    // 编辑账户（P1 backlog）：入口占位，点击明确告知
-                    Button {
-                        toast.show("编辑账户将在后续版本提供")
-                    } label: {
+                    // 编辑账户（P1 C4-2）
+                    Button(action: onRequestEdit) {
                         Image(systemName: "square.and.pencil")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(Token.Palette.t2)

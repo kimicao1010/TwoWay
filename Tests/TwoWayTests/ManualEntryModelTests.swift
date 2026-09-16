@@ -115,9 +115,77 @@ struct ManualEntryModelTests {
         }
     }
 
+    // MARK: 编辑模式（P1 C4-2）
+
+    @Test("编辑模式：prefillForEditing 填入现值，提交走 update 而非新增")
+    func editModeUpdatesExisting() throws {
+        let (store, backing) = makeStore()
+        try store.add(displayName: "GitHub", issuer: "GitHub", secretBase32: "JBSWY3DPEHPK3PXP")
+        let account = try #require(store.accounts.first)
+
+        let model = ManualEntryModel()
+        model.prefillForEditing(account: account, secretBase32: store.secretBase32(for: account.id) ?? "")
+
+        // 预填 = 现值
+        #expect(model.displayName == "GitHub")
+        #expect(model.issuer == "GitHub")
+        #expect(model.secretRaw == "JBSWY3DPEHPK3PXP")
+        #expect(model.editingAccountID == account.id)
+
+        // 改动后提交 → 更新，不新增
+        model.displayName = "GitHub 主号"
+        model.algorithm = .sha256
+        model.digits = 8
+        let name = try model.submit(into: store)
+
+        #expect(name == "GitHub 主号")
+        #expect(store.accounts.count == 1, "编辑不应新增账户")
+        #expect(store.accounts.first?.displayName == "GitHub 主号")
+        #expect(store.accounts.first?.parameters.algorithm == .sha256)
+        #expect(store.accounts.first?.parameters.digits == 8)
+        #expect(store.accounts.first?.id == account.id, "id 不变（密钥条目绑定）")
+
+        // 存储层也已更新（含密钥重写）
+        let stored = try #require(backing.readAllMetadata().first)
+        let entry = try backing.read(id: stored.id)
+        #expect(entry.secret == (try Base32.decode("JBSWY3DPEHPK3PXP")))
+        #expect(model.editingAccountID == nil, "提交后退出编辑模式")
+    }
+
+    @Test("编辑模式：改密钥后必须用新密钥取码（旧码缓存清除）")
+    func editModeUpdatesSecretAndCode() throws {
+        let (store, _) = makeStore()
+        try store.add(displayName: "probe", issuer: nil, secretBase32: "JBSWY3DPEHPK3PXP")
+        let account = try #require(store.accounts.first)
+        let before = try #require(store.code(for: account.id))
+
+        let model = ManualEntryModel()
+        model.prefillForEditing(account: account, secretBase32: "GEZDGNBVGY3TQOJQ")
+        try model.submit(into: store)
+
+        let after = try #require(store.code(for: account.id))
+        #expect(after != before, "换密钥后取码必须变化")
+        #expect(store.accounts.count == 1)
+    }
+
+    @Test("编辑模式：空名称回落「新账户」")
+    func editModeEmptyName() throws {
+        let (store, _) = makeStore()
+        try store.add(displayName: "old", issuer: nil, secretBase32: "JBSWY3DPEHPK3PXP")
+        let account = try #require(store.accounts.first)
+
+        let model = ManualEntryModel()
+        model.prefillForEditing(account: account, secretBase32: "JBSWY3DPEHPK3PXP")
+        model.displayName = "   "
+
+        let name = try model.submit(into: store)
+        #expect(name == "新账户")
+        #expect(store.accounts.first?.displayName == "新账户")
+    }
+
     // MARK: reset
 
-    @Test("reset 恢复全部默认值")
+    @Test("reset 恢复全部默认值（含退出编辑模式）")
     func reset() {
         let model = ManualEntryModel()
         model.displayName = "x"

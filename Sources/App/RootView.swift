@@ -43,6 +43,29 @@ struct RootView: View {
                 )
                 .transition(.opacity)
 
+            case .editAccount:
+                // P1 C4-2：编辑选中账户；账户不存在时回落列表
+                if let account = store.selectedAccount {
+                    AddAccountView(
+                        store: store,
+                        toast: toast,
+                        onCancel: { show(.detail) },
+                        onAdded: { _ in },
+                        onImported: { _, _ in },
+                        editing: AddAccountView.EditTarget(
+                            account: account,
+                            secretBase32: store.secretBase32(for: account.id) ?? ""
+                        ),
+                        onSaved: { name in
+                            show(.detail)
+                            toast.show("已保存「\(name)」")
+                        }
+                    )
+                    .transition(.opacity)
+                } else {
+                    listScreen
+                }
+
             case .detail:
                 // E2：账户不存在（已删空 / 无选中）时回落列表
                 if store.selectedAccount != nil {
@@ -52,6 +75,7 @@ struct RootView: View {
                         showsDeleteDialog: router.showsDeleteDialog,
                         onRequestDeleteDialog: { router.showsDeleteDialog = true },
                         onCancelDelete: { router.showsDeleteDialog = false },
+                        onRequestEdit: { router.screen = .editAccount },
                         onDeleted: { name in
                             show(.list)
                             toast.show("已删除「\(name)」")
@@ -115,6 +139,11 @@ struct RootView: View {
                 store.selectedAccountID = store.accounts.first?.id
                 router.screen = .detail
                 router.showsDeleteDialog = ProcessInfo.processInfo.arguments.contains("--debug-detail-dialog")
+            }
+            // --debug-edit：直进编辑屏
+            if ProcessInfo.processInfo.arguments.contains("--debug-edit") {
+                store.selectedAccountID = store.accounts.first?.id
+                router.screen = .editAccount
             }
             // --debug-import-file <path>：启动即模拟「拖入图片解码 → 导入」完整链路
             // （手工回归用：免掉无障碍权限下无法程序化拖放的局限）

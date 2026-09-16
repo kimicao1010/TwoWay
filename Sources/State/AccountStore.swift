@@ -21,6 +21,10 @@ final class AccountStore {
 
     private(set) var isLoading = false
 
+    enum StoreError: Error, Equatable {
+        case accountNotFound
+    }
+
     // MARK: - 依赖
 
     private let secrets: any SecretStoring
@@ -122,6 +126,40 @@ final class AccountStore {
         accounts.insert(account, at: 0)   // 新账户置顶
         secretCache[account.id] = secret
         codeCache[account.id] = nil
+    }
+
+    /// 编辑账户（P1 C4-2）：名称 / 发行方 / 密钥 / 高级参数可改
+    ///
+    /// 密钥重走 E3 清洗 + E4 校验；写回后清空该账户的取码缓存（参数或密钥可能已变）。
+    func update(
+        id: UUID,
+        displayName rawName: String,
+        issuer: String?,
+        secretBase32: String,
+        parameters: OTPParameters
+    ) throws {
+        guard let index = accounts.firstIndex(where: { $0.id == id }) else {
+            throw StoreError.accountNotFound
+        }
+        let secret = try Base32.decode(secretBase32)   // E3 清洗 + E4 校验
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var account = accounts[index]
+        account.displayName = name.isEmpty ? "新账户" : name
+        account.issuer = issuer
+        account.parameters = parameters
+
+        try secrets.update(id: id, secret: secret, metadataJSON: encoder.encode(account))
+
+        accounts[index] = account
+        secretCache[id] = secret
+        codeCache[id] = nil
+    }
+
+    /// 编辑页预填用：返回该账户密钥的规范 Base32 形态（密钥始终只在内存中流转，S1）
+    func secretBase32(for id: UUID) -> String? {
+        guard let secret = secretCache[id] ?? (try? secrets.read(id: id).secret) else { return nil }
+        return Base32.encode(secret)
     }
 
     /// PRD FR-06：删除后列表同步减少；E2 删到 0 个时计数归零

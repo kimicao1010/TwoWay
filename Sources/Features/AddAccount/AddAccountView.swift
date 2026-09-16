@@ -20,13 +20,24 @@ struct AddAccountView: View {
     var onImported: (Int, _ skippedHOTPCount: Int) -> Void
     /// 初始分段（默认手动；调试参数 / 解码成功回跳会用到）
     var initialMethod: Method = .manual
+    /// 编辑模式（P1 C4-2）：非 nil 时隐藏分段控件，提交走 update
+    var editing: EditTarget?
+    /// 编辑保存成功回调（回详情页 + toast）
+    var onSaved: (String) -> Void = { _ in }
+
+    struct EditTarget: Equatable {
+        let account: Account
+        let secretBase32: String
+    }
 
     @State private var method: Method = .manual
     @State private var model = ManualEntryModel()
 
+    private var isEditing: Bool { editing != nil }
+
     var body: some View {
         VStack(spacing: 0) {
-            WindowTitlebar(title: "添加账户") {
+            WindowTitlebar(title: isEditing ? "编辑账户" : "添加账户") {
                 Button("取消", action: handleCancel)
                     .buttonStyle(.plain)
                     .font(Token.Typography.body)
@@ -36,33 +47,46 @@ struct AddAccountView: View {
 
             ScrollView {
                 VStack(spacing: 16) {
-                    SegmentedControl(
-                        options: [Method.importImage, .manual],
-                        title: Self.segmentTitle,
-                        selection: $method
-                    )
-
-                    switch method {
-                    case .importImage:
-                        ImportImageView(
-                            onDecoded: { fields in
-                                // 解码成功：预填 + 自动切「手动输入」分段（PRD §7.4）
-                                model.prefill(from: fields)
-                                method = .manual
-                            },
-                            onBatchImport: { fields, skipped in
-                                importAll(fields, skippedHOTPCount: skipped)
-                            }
+                    if !isEditing {
+                        SegmentedControl(
+                            options: [Method.importImage, .manual],
+                            title: Self.segmentTitle,
+                            selection: $method
                         )
-                    case .manual:
-                        ManualEntryView(model: model, onSubmit: submit)
+                    }
+
+                    if isEditing {
+                        ManualEntryView(model: model, onSubmit: submit, submitTitle: "保存")
+                    } else {
+                        switch method {
+                        case .importImage:
+                            ImportImageView(
+                                onDecoded: { fields in
+                                    // 解码成功：预填 + 自动切「手动输入」分段（PRD §7.4）
+                                    model.prefill(from: fields)
+                                    method = .manual
+                                },
+                                onBatchImport: { fields, skipped in
+                                    importAll(fields, skippedHOTPCount: skipped)
+                                }
+                            )
+                        case .manual:
+                            ManualEntryView(model: model, onSubmit: submit)
+                        }
                     }
                 }
                 .padding(Token.Metrics.pagePadding)
             }
             .scrollIndicators(.hidden)
         }
-        .onAppear { method = initialMethod }
+        .onAppear {
+            if let editing {
+                model.prefillForEditing(account: editing.account, secretBase32: editing.secretBase32)
+                method = .manual
+            } else {
+                method = initialMethod
+            }
+        }
     }
 
     private static func segmentTitle(_ method: Method) -> String {
@@ -80,12 +104,16 @@ struct AddAccountView: View {
     private func submit() {
         do {
             let name = try model.submit(into: store)
-            onAdded(name)
+            if isEditing {
+                onSaved(name)
+            } else {
+                onAdded(name)
+            }
         } catch let error as Base32.DecodingError {
             // E4：提交时拦截，给出明确提示，不静默
             toast.show(ManualEntryModel.message(for: error))
         } catch {
-            toast.show("添加失败，请检查密钥后重试")
+            toast.show(isEditing ? "保存失败，请检查密钥后重试" : "添加失败，请检查密钥后重试")
         }
     }
 
@@ -132,6 +160,8 @@ extension OTPParameters.HashAlgorithm {
 struct ManualEntryView: View {
     let model: ManualEntryModel
     var onSubmit: () -> Void
+    /// 主按钮文案（编辑模式为「保存」）
+    var submitTitle: String = "添加账户"
 
     @State private var advancedExpanded = true
 
@@ -167,7 +197,7 @@ struct ManualEntryView: View {
             // 码文本由整秒脉冲驱动；环同为 RingClock 直驱（同刻刷新）
             PreviewCard(model: model, pulse: SecondPulse.shared.value)
 
-            PrimaryButton(title: "添加账户", action: onSubmit)
+            PrimaryButton(title: submitTitle, action: onSubmit)
         }
     }
 
