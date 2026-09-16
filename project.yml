@@ -50,6 +50,7 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         NSHighResolutionCapable: true
         NSPrincipalClass: NSApplication
-        # 实测：WKWebView 之外的普通 macOS app 也需要它才能拿到摄像头权限；
-        # 缺这个键 TCC 不会弹窗，扫码功能会静默失败
-        NSCameraUsageDescription: 用于扫描验证器二维码，添加新账户。
+        # v1.1：二维码仅支持图片导入，不申请摄像头权限。
+        # 故此处**不得**声明 NSCameraUsageDescription —— 这是 C2-6 的验收判据之一
+        # （PRD §7.4 导入图片 AC 末条），也为将来沙盒化省掉
+        # com.apple.security.device.camera entitlement。

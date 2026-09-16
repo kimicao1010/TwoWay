@@ -13,14 +13,15 @@
 
 | # | 决策项 | 结论 | 影响面 |
 |---|---|---|---|
-| D1 | 最低部署目标 | **macOS 14.0**（Sonoma） | 扫码路线、可用修饰符、测试矩阵 |
+| D1 | 最低部署目标 | **macOS 14.0**（Sonoma） | 可用修饰符、状态层、测试矩阵 |
 | D2 | 窗口与标题栏 | **方案 A**：`.windowStyle(.hiddenTitleBar)` + `NSWindow` 微调 | G-01/G-02/G-03 |
 | D3 | 密钥存储 | **方案 A**：每账户一条 `kSecClassGenericPassword` item | S1、数据层全部 |
 | D4 | 字体 | **等价替代**：`system(design:.monospaced)` + `monospacedDigit`，中文走系统 PingFang SC | G-06、§8.2 |
-| D5 | 签名身份 | **自签 Code Signing 证书**（非 ad-hoc） | 密钥存储 S1 的可用性、摄像头 TCC、全部构建流程，详见 §9 |
+| D5 | 签名身份 | **自签 Code Signing 证书**（非 ad-hoc） | 密钥存储 S1 的可用性、全部构建流程，详见 §9 |
 | D6 | 平台范围 | **仅 macOS 原生**，不做跨平台 | PRD §4 范围外条款维持；评估过程见 §10 |
+| D7 | 二维码获取方式 | **仅图片导入**，移除摄像头扫码 | FR-04、页面 02、C2-6；PRD v1.1 |
 
-> D1 依据：`AVCaptureMetadataOutput` 在 macOS 上最低要求 13.0（见 §2）。定 14.0 可无缺口覆盖 P0/P1/P2 全部需求。
+> D1 依据（v1.1 更新）：原依据 `AVCaptureMetadataOutput`（macOS 13.0+）随摄像头功能一并移除而作废；现依据为 `Observation` 框架 `@Observable` 的 **macOS 14.0** 下限（见 §2）。定 14.0 仍可无缺口覆盖 P0/P1/P2 全部需求。
 > D5 依据：本机 A/B 实测证明 ad-hoc 的 DR 随 cdhash 变化，重建后读取已存密钥会弹密码框（§9.2）。
 > D6 依据：跨平台无法同时满足逐像素验收与 S2，且性能目标无法承诺。详见 §10。
 
@@ -31,7 +32,7 @@
 **产品定位**：macOS 原生 TOTP 验证器，400×700pt 竖向窄窗，仅深色，对标 Google Authenticator 的操作心智。
 
 **P0 交付物（8 项）**
-验证码列表 · 点按复制 · 左滑操作（详情｜删除）· 添加账户（扫码 + 手动）· 账户详情 · 删除确认 · TOTP 引擎与倒计时 · 搜索
+验证码列表 · 点按复制 · 左滑操作（详情｜删除）· 添加账户（**图片导入** + 手动）· 账户详情 · 删除确认 · TOTP 引擎与倒计时 · 搜索
 
 **P1**：触控板双指横滑、全局快捷键、编辑账户、导入导出/备份、剪贴板自动清除
 **P2**：菜单栏常驻、iCloud 同步、生物识别锁定、多主题
@@ -60,21 +61,23 @@
 | `WindowResizability` / `.windowResizability` | macOS 13.0+ | G-01 固定窗口尺寸 | `SwiftUI.swiftinterface:604, 621` |
 | `TimelineView` / `AnimationTimelineSchedule` | macOS 12.0+ | T3 连续平滑倒计环 | `SwiftUI.swiftinterface:29444, 11238` |
 | `MenuBarExtra` | macOS 13.0+ | P2 菜单栏常驻 | `SwiftUI.swiftinterface:2106` |
-| **`AVCaptureMetadataOutput`** | **macOS 13.0+** | 活体扫码 | `AVCaptureMetadataOutput.h:26` |
-| `AVMetadataObjectTypeQRCode` | macOS 10.15+ | 二维码类型 | `AVMetadataObject.h:531` |
-| `VNDetectBarcodesRequest`（Vision） | macOS 10.13+ | 图片文件导入二维码 | `VNDetectBarcodesRequest.h:20` |
-| `AVCaptureSession` / `AVCaptureVideoDataOutput` | macOS 10.7+ | 摄像头采集（兜底路线） | `AVCaptureSession.h:30` |
-| `AVCaptureDevice.authorizationStatus/requestAccess` | macOS 10.14+ | 摄像头权限 | `AVCaptureDevice.h:2171` |
+| **`AVCaptureMetadataOutput`** | ~~macOS 13.0+~~ | ~~活体扫码~~ → **v1.1 起不再需要** | `AVCaptureMetadataOutput.h:26` |
+| `AVMetadataObjectTypeQRCode` | macOS 10.15+ | ~~二维码类型~~ → 不再需要 | `AVMetadataObject.h:531` |
+| `VNDetectBarcodesRequest`（Vision） | macOS 10.13+ | **图片导入解码 —— 现为唯一解码路径** | `VNDetectBarcodesRequest.h:20` |
+| `AVCaptureSession` / `AVCaptureVideoDataOutput` | ~~macOS 10.7+~~ | ~~摄像头采集（兜底路线）~~ → **不再需要** | `AVCaptureSession.h:30` |
+| `AVCaptureDevice.authorizationStatus/requestAccess` | ~~macOS 10.14+~~ | ~~摄像头权限~~ → **不再需要** | `AVCaptureDevice.h:2171` |
+| **`Observation` / `@Observable`** | **macOS 14.0+** | 状态层 —— **D1 的现依据** | `Observation.swiftinterface:21` |
 | `CryptoKit.Insecure.SHA1`（→ `HMAC<Insecure.SHA1>`） | macOS 10.15+ | TOTP 算法 | `CryptoKit.swiftinterface:561` |
 | `LAContext` / `LAPolicyDeviceOwnerAuthenticationWithBiometrics` | macOS 10.12.2+ | P2 生物识别锁定 | `LAContext.h:34` |
 | `NSWindow.titlebarAppearsTransparent` | macOS 10.10+ | 标题栏透明 | `NSWindow.h:309` |
 | `.onKeyPress(_:action:)` | macOS 14.0+ | C3 键盘可达 | `SwiftUI.swiftinterface:25732` |
 | `.onChange(of:initial:)` | macOS 14.0+ | 状态观察 | `SwiftUI.swiftinterface:15845` |
 
-**两个必须记住的推论**
+**必须记住的推论**
 
-1. 若把最低版本压到 macOS 12，活体扫码必须整条改走 `AVCaptureVideoDataOutput` + Vision 路线（可行，但代码量与调优成本翻倍）→ 已由 D1 规避。
-2. `AVCaptureMetadataOutput` 可用 **不等于** 运行时支持 `.qr`：必须在运行期检查 `availableMetadataObjectTypes` 是否包含 `.qr`，并准备 Vision 兜底。
+1. **v1.1 移除摄像头后，D1 的依据已更换（结论不变）**：原依据 `AVCaptureMetadataOutput`（macOS 13.0+）随功能一起作废；现依据是 `Observation` 框架的 `@Observable` 要求 **macOS 14.0**，以及 `UnitCurve`（在 14.0 部署目标下编译通过）。这两条更贴近架构核心，比原依据更硬。
+2. `VNDetectBarcodesRequest`（macOS 10.13+）现在承担**唯一**解码路径的职责 —— 原先「摄像头 + 图片」双路径互为兜底的冗余设计消失了，因此这张卡的单测与异常用例覆盖度要求相应提高（见 §4.6）。
+3. 移除摄像头同时消掉一整个风险面：不再需要 `NSCameraUsageDescription`、不再有摄像头 TCC 授权（也就没有「重建后授权失效」这条运维负担）、沙盒化时的 `com.apple.security.device.camera` entitlement 也一并取消。
 
 ---
 
@@ -83,11 +86,11 @@
 ```
 窗口外壳        NSWindow 400×700 (固定)  │  自绘标题栏 52pt (hiddenTitleBar + 交通灯)
                       ↓
-功能屏 · P0     验证码列表  │  添加账户(扫码/手动)  │  详情 / 删除确认
+功能屏 · P0     验证码列表  │  添加账户(导入图片/手动)  │  详情 / 删除确认
                       ↓
 状态与时钟      AccountStore (@Observable)  │  单一时钟源 30Hz  │  行展开状态(单值→互斥)
                       ↓
-服务层          TOTP 引擎  │  密钥存储(Keychain 唯一出口)  │  剪贴板  │  扫码与解析
+服务层          TOTP 引擎  │  密钥存储(Keychain 唯一出口)  │  剪贴板  │  图片导入与解析
                       ↓
 领域 / 设计     Account · OTPParameters  │  DesignSystem (§8 tokens + 基础组件)
 
@@ -179,18 +182,21 @@
 
 **实现路线**：先用纯 SwiftUI（`DragGesture(minimumDistance: 8)` + 状态机 + suppress 标志）；若实测存在偶发误触，升级为 `NSViewRepresentable` 包 `NSPanGestureRecognizer`，把 tap 判定收回 AppKit 层，规避 SwiftUI 手势竞争。
 
-### 4.6 扫码与解析
+### 4.6 图片导入与解析（v1.1：不再包含摄像头）
 
-| 路径 | 实现 | 版本 |
+| 环节 | 实现 | 版本 |
 |---|---|---|
-| 活体扫描 | `AVCaptureSession` + `AVCaptureMetadataOutput`，运行期校验 `availableMetadataObjectTypes` 含 `.qr` | macOS 13.0+ |
-| 兜底 | `AVCaptureVideoDataOutput` 取帧 → Vision `VNDetectBarcodesRequest` | macOS 10.13+ |
-| 图片导入 | Vision `VNDetectBarcodesRequest` | macOS 10.13+ |
+| 图片获取 | 拖放区接收拖入的图片文件；点击唤起 `NSOpenPanel`，限定图片 UTI | macOS 10.11+ |
+| 解码 | Vision `VNDetectBarcodesRequest`，symbology 限定 `.qr` | macOS 10.13+ |
+| 解析 | `OTPAuthURI` 解析器，产出 secret / issuer / account / algorithm / digits / period | 自研 |
+| 落库 | 先经 `KeychainStore` 写入，再刷新列表（复用 FR-04 手动输入的同一条路径） | 自研 |
 
-- 两条路径输出统一交给 `otpauth://` URI 解析器（`OTPAuthURI`），产出 secret / issuer / account / algorithm / digits / period，再构造 `Account`
-- 需要有明确提示：非 `otpauth://` 的二维码（如普通网址）要给出「这不是一个验证器二维码」而不是静默失败
-- 权限与 entitlement：`NSCameraUsageDescription`（macOS 10.14+ API 要求）；沙盒下另需 `com.apple.security.device.camera`、选图另需 `com.apple.security.files.user-selected.read-only`
-- **待 spike 确认**：真机上 `AVCaptureMetadataOutput` 对 `.qr` 的实际支持情况（SDK 标注可用 ≠ 运行时可用）
+**设计要点**
+
+- 解码成功 → 切到「手动输入」分段并**预填**全部字段，由用户确认后提交。不直接入库 —— 用户需要看到解析结果，也避免解析偏差静默产生错误账户（PRD 7.4）
+- 职责单一化：**Vision 现在是唯一解码路径**，原先「摄像头（`AVCaptureMetadataOutput`）+ 图片（Vision）」的双路径互为兜底没有了。因此这一卡必须把异常路径测全：无二维码、图片损坏、非 otpauth 内容、含多个二维码（PRD E9/E10/E11）
+- 拖放区沿用 v1.0 取景框的几何与渐变底（360 × 340 / 圆角 14 / `#0F121A → #212433`），仅把四角取景括号换成 1 px 虚线描边、扫描线动画删除，保持设计语言连续（PRD 7.4）
+- **不申请摄像头权限**：App 的 Info.plist 中不得出现 `NSCameraUsageDescription`。这条列入 C2-6 验收判据（见 PRD 7.4 AC 末条）
 
 ### 4.7 剪贴板
 
@@ -227,11 +233,11 @@
 │  ├─ App/                      # @main、Scene、WindowConfigurator
 │  ├─ Features/
 │  │  ├─ AccountList/           # 列表 + 行 + 左滑
-│  │  ├─ AddAccount/            # 扫码 + 手动
+│  │  ├─ AddAccount/            # 导入图片 + 手动
 │  │  ├─ AccountDetail/
 │  │  └─ DeleteConfirm/
 │  ├─ State/                    # AccountStore、ClockTicker、RowExpansionState
-│  ├─ Services/                 # TOTPEngine、KeychainStore、Clipboard、QRScanner、OTPAuthURI
+│  ├─ Services/                 # TOTPEngine、KeychainStore、Clipboard、QRImageDecoder、OTPAuthURI
 │  ├─ Domain/                   # Account、OTPParameters
 │  └─ DesignSystem/             # Tokens、Component/*
 └─ Tests/                       # 只覆盖 Services / Domain
@@ -259,7 +265,7 @@
 | C2-3 | 复制 + toast + E1 失败路径 | 点按 1 步完成，失败有提示 |
 | C2-4 | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5） | 与 Demo 并排比对逐秒一致 |
 | C2-5 | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 | 密钥变更即刷新预览 |
-| C2-6 | 扫码页：活体 + 图片导入（含可行性 spike） | 两条路径都能落到 `Account` |
+| C2-6 | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填（v1.1 已移除摄像头） | 能解码并预填到手动输入页；E9/E10/E11 异常路径均有提示；Info.plist 无 `NSCameraUsageDescription` |
 | C2-7 | 详情页：身份区 + 168 大环 + 参数卡 + 操作区 | 参数与账户一致 |
 | C2-8 | 删除确认弹窗（FR-06） | 必经二次确认，确认后回列表 |
 | **阶段 3 · 验收与交付** | | |
@@ -276,7 +282,7 @@
 
 | # | 事项 | 阻塞的卡 |
 |---|---|---|
-| U1 | 是否沙盒化（App Sandbox） | C1-1（Keychain 行为）、C2-6（摄像头/选图 entitlement） |
+| U1 | 是否沙盒化（App Sandbox） | C1-1（Keychain 行为）、C2-6（选图 entitlement） |
 | U2 | **Bundle ID 与应用名** —— 一旦开始存储密钥即不可再改（DR 的 identifier 子句锚定它，改动 = 已存密钥全部不可读） | C0-1、C0-1b |
 | U3 | G-04 原型导航：删除 or 保留为开发期调试入口 | C0-2 |
 | U4 | G-05 缩放策略：是否确认映射为「固定尺寸窗口 + 内部不响应式重排」 | C0-3 |
@@ -293,7 +299,8 @@
 | # | 风险 | 等级 | 应对 |
 |---|---|---|---|
 | RK1 | R6「拖拽后补发的 click 被吞掉」在 SwiftUI 手势体系下可能偶发失效 | 高 | C2-2 独立成卡 + 手工回归清单；备选 NSPanGestureRecognizer 路线 |
-| RK2 | `AVCaptureMetadataOutput` 运行时对 `.qr` 的支持依赖设备 | 中 | C2-6 内先做 30 分钟可行性 spike；Vision 兜底已确认可用 |
+| ~~RK2~~ | ~~`AVCaptureMetadataOutput` 运行时对 `.qr` 的支持依赖设备~~ | **已关闭** | v1.1 移除摄像头，不适用 |
+| RK2b | Vision 成为**唯一**解码路径，无兜底；对低质量 / 畸变 / 缩放图片的识别率未知 | 中 | C2-6 用真实截图样本集实测（手机截图、器裁剪、含透视畸变）；必要时加 `CIFilter` 预处理 |
 | RK3 | 系统窗口圆角与 PRD 12px 存在差值 | 中 | C0-3 spike 出实测差值，再决定是否追加无边框自绘 |
 | RK4 | `SecItemCopyMatching` 批量返回行为与预期不符 | 中 | C1-1 内先写最小验证脚本，再封装 |
 | RK5 | 等价字体与设计稿存在字距/字重差异，影响「逐像素」验收 | 低 | C3-1 列出差异项并给出处置结论（接受 / 调整数值 / 改打包字体） |
@@ -336,7 +343,8 @@ Apple TN3127《Inside Code Signing: Requirements》原文：
 | **自签证书** | `identifier "com.kimi.mfa.acltest" and certificate root = H"31ef4f33…"` | **与 A 完全相同** | ✅ `status=0`，成功取回 `JBSWY3DPEHPK3PXP` |
 
 结论：
-- **ad-hoc：密钥不会丢**，但每次改代码重建后，读取已存密钥都会弹系统密码框。对一个每次启动都要拉取全部密钥的验证器，这不可接受。同理，摄像头的 TCC 授权也会每次重建后失效。
+- **ad-hoc：密钥不会丢**，但每次改代码重建后，读取已存密钥都会弹系统密码框。对一个每次启动都要拉取全部密钥的验证器，这不可接受。
+  （同类机制也作用于 TCC 授权：任何需要摄像头 / 麦克风 / 辅助功能 / 录屏的功能，ad-hoc 下授权都会随重建失效。**v1.1 移除摄像头后，本项目已无需要 TCC 授权的功能，风险面收敛到 Keychain 一项。**）
 - **自签证书：DR 稳定，重建后静默读取。**
 
 ### 9.3 决策 D5：自签代码签名证书作为唯一签名身份
