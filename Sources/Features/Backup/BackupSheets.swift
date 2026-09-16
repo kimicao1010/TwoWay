@@ -1,16 +1,19 @@
 import SwiftUI
 
-/// 导出范围（两个导出弹窗共用）：全部账户 / 指定某一个账户
+/// 导出范围（两个导出弹窗共用）：全部账户 / 多选指定账户
 enum ExportScope: Hashable {
     case all
-    case single
+    case selected
 }
 
-/// 导出范围选择器：分段（全部 / 指定）+ 指定时选择具体账户
+/// 导出范围选择器：分段（全部 / 选择账户）+ 选择时**多选**账户清单
+///
+/// 多选是刻意设计：常见诉求是「把这几个迁到手机」，
+/// 单选会逼用户导出多次（每次都是独立文件/二维码）。
 struct ExportScopePicker: View {
     let accounts: [Account]
     @Binding var scope: ExportScope
-    @Binding var selectedAccountID: UUID?
+    @Binding var selectedIDs: Set<UUID>
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -19,26 +22,83 @@ struct ExportScopePicker: View {
                 .foregroundStyle(Token.Palette.t2)
 
             SegmentedControl(
-                options: [ExportScope.all, .single],
-                title: { $0 == .all ? "全部账户（\(accounts.count)）" : "指定账户" },
+                options: [ExportScope.all, .selected],
+                title: { $0 == .all ? "全部账户（\(accounts.count)）" : "选择账户" },
                 selection: $scope
             )
 
-            if scope == .single {
-                Picker("", selection: $selectedAccountID) {
-                    ForEach(accounts) { account in
-                        Text(Self.label(for: account)).tag(Optional(account.id))
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .font(.system(size: 13))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if scope == .selected {
+                selectedList
             }
         }
-        .onAppear {
-            if selectedAccountID == nil { selectedAccountID = accounts.first?.id }
+    }
+
+    private var selectedList: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text(selectedIDs.isEmpty ? "未选择账户" : "已选 \(selectedIDs.count) 个")
+                    .font(Token.Typography.caption)
+                    .foregroundStyle(selectedIDs.isEmpty ? Token.Palette.dangerText : Token.Palette.t3)
+                Spacer(minLength: 0)
+                Button("全选") { selectedIDs = Set(accounts.map(\.id)) }
+                    .buttonStyle(.plain)
+                    .font(Token.Typography.caption)
+                    .foregroundStyle(Token.Palette.accent)
+                Text("·").font(Token.Typography.caption).foregroundStyle(Token.Palette.t4)
+                Button("清空") { selectedIDs = [] }
+                    .buttonStyle(.plain)
+                    .font(Token.Typography.caption)
+                    .foregroundStyle(Token.Palette.accent)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(accounts) { account in
+                        accountRow(account)
+                    }
+                }
+            }
+            .frame(maxHeight: 132)
+            .scrollIndicators(.hidden)
+            .padding(.bottom, 6)
         }
+        .background(Token.Palette.input)
+        .overlay(
+            RoundedRectangle(cornerRadius: Token.Metrics.inputRadius)
+                .stroke(Token.Palette.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Token.Metrics.inputRadius))
+    }
+
+    private func accountRow(_ account: Account) -> some View {
+        let isSelected = selectedIDs.contains(account.id)
+        return Button {
+            if isSelected {
+                selectedIDs.remove(account.id)
+            } else {
+                selectedIDs.insert(account.id)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isSelected ? Token.Palette.accent : Token.Palette.t4)
+                Text(Self.label(for: account))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Token.Palette.t1)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(Self.label(for: account))
     }
 
     /// 与列表行一致的「发行方：账户名」表述
@@ -49,9 +109,9 @@ struct ExportScopePicker: View {
         return account.displayName
     }
 
-    /// 实际导出的账户 id：nil = 全部
-    static func effectiveID(scope: ExportScope, selectedAccountID: UUID?) -> UUID? {
-        scope == .single ? selectedAccountID : nil
+    /// 实际导出的账户集合：nil = 全部（顺序按传入的 accounts）
+    static func effectiveIDs(scope: ExportScope, selectedIDs: Set<UUID>) -> Set<UUID>? {
+        scope == .selected ? selectedIDs : nil
     }
 }
 
@@ -60,13 +120,15 @@ struct BackupExportSheet: View {
     let accounts: [Account]
     @Binding var errorMessage: String?
     var onCancel: () -> Void
-    /// 传入口令与范围（nil = 全部）；调用方负责弹保存面板、写文件
-    var onExport: (String, UUID?) -> Void
+    /// 传入口令与范围（nil = 全部；非 nil = 所选账户集合）；调用方负责弹保存面板、写文件
+    var onExport: (String, Set<UUID>?) -> Void
 
     @State private var password = ""
     @State private var confirmation = ""
-    @State private var scope: ExportScope = .all
-    @State private var selectedAccountID: UUID?
+    /// 默认「全部账户」；`--debug-scope-selected` 仅用于回归截图（多选清单渲染）
+    @State private var scope: ExportScope = ProcessInfo.processInfo.arguments
+        .contains("--debug-scope-selected") ? .selected : .all
+    @State private var selectedIDs: Set<UUID> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -80,7 +142,7 @@ struct BackupExportSheet: View {
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
 
-            ExportScopePicker(accounts: accounts, scope: $scope, selectedAccountID: $selectedAccountID)
+            ExportScopePicker(accounts: accounts, scope: $scope, selectedIDs: $selectedIDs)
 
             SecureTokenField(label: "口令（至少 8 位）", text: $password, placeholder: "用于加密备份文件")
             SecureTokenField(label: "确认口令", text: $confirmation, placeholder: "再次输入")
@@ -107,8 +169,8 @@ struct BackupExportSheet: View {
             errorMessage = "还没有可导出的账户"
             return
         }
-        if scope == .single, selectedAccountID == nil {
-            errorMessage = "请选择要导出的账户"
+        if scope == .selected, selectedIDs.isEmpty {
+            errorMessage = "请至少选择一个账户"
             return
         }
         guard password.count >= BackupArchive.minimumPasswordLength else {
@@ -119,7 +181,7 @@ struct BackupExportSheet: View {
             errorMessage = "两次输入的口令不一致"
             return
         }
-        onExport(password, ExportScopePicker.effectiveID(scope: scope, selectedAccountID: selectedAccountID))
+        onExport(password, ExportScopePicker.effectiveIDs(scope: scope, selectedIDs: selectedIDs))
     }
 }
 
@@ -132,10 +194,10 @@ struct GAMigrationExportSheet: View {
     @Binding var errorMessage: String?
     var onCancel: () -> Void
     /// 传入范围（nil = 全部）
-    var onExport: (UUID?) -> Void
+    var onExport: (Set<UUID>?) -> Void
 
     @State private var scope: ExportScope = .all
-    @State private var selectedAccountID: UUID?
+    @State private var selectedIDs: Set<UUID> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -149,7 +211,7 @@ struct GAMigrationExportSheet: View {
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
 
-            ExportScopePicker(accounts: accounts, scope: $scope, selectedAccountID: $selectedAccountID)
+            ExportScopePicker(accounts: accounts, scope: $scope, selectedIDs: $selectedIDs)
 
             // 安全提示：迁移码载荷是明文（只做 base64），必须明示
             HStack(alignment: .top, spacing: 8) {
@@ -189,11 +251,11 @@ struct GAMigrationExportSheet: View {
             errorMessage = "还没有可导出的账户"
             return
         }
-        if scope == .single, selectedAccountID == nil {
-            errorMessage = "请选择要导出的账户"
+        if scope == .selected, selectedIDs.isEmpty {
+            errorMessage = "请至少选择一个账户"
             return
         }
-        onExport(ExportScopePicker.effectiveID(scope: scope, selectedAccountID: selectedAccountID))
+        onExport(ExportScopePicker.effectiveIDs(scope: scope, selectedIDs: selectedIDs))
     }
 }
 

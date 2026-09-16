@@ -7,13 +7,39 @@ import Testing
 @Suite("导出范围选择")
 struct ExportScopeTests {
 
-    @Test("effectiveID：全部 → nil（导出全部）；指定 → 该账户 id")
-    func effectiveID() {
-        let id = UUID()
-        #expect(ExportScopePicker.effectiveID(scope: .all, selectedAccountID: nil) == nil)
-        #expect(ExportScopePicker.effectiveID(scope: .all, selectedAccountID: id) == nil)
-        #expect(ExportScopePicker.effectiveID(scope: .single, selectedAccountID: id) == id)
-        #expect(ExportScopePicker.effectiveID(scope: .single, selectedAccountID: nil) == nil)
+    @Test("effectiveIDs：全部 → nil（导出全部）；选择 → 所选集合（可多个）")
+    func effectiveIDs() {
+        let first = UUID()
+        let second = UUID()
+
+        #expect(ExportScopePicker.effectiveIDs(scope: .all, selectedIDs: []) == nil)
+        #expect(ExportScopePicker.effectiveIDs(scope: .all, selectedIDs: [first, second]) == nil)
+        #expect(ExportScopePicker.effectiveIDs(scope: .selected, selectedIDs: [first]) == [first])
+        #expect(ExportScopePicker.effectiveIDs(scope: .selected, selectedIDs: [first, second]) == [first, second])
+        #expect(ExportScopePicker.effectiveIDs(scope: .selected, selectedIDs: []) == [])
+    }
+
+    @Test("多选过滤：一次导出覆盖所选多个账户（不必导出多次）")
+    func multiSelectionFiltersInOnePass() throws {
+        let store = AccountStore(secrets: InMemorySecretStore())
+        try store.add(displayName: "GitHub", issuer: "GitHub", secretBase32: "JBSWY3DPEHPK3PXP")
+        try store.add(displayName: "Acme Cloud", issuer: "Acme Cloud", secretBase32: "GEZDGNBVGY3TQOJQ")
+        try store.add(displayName: "Homelab", issuer: "Homelab", secretBase32: "KRSXG5CTMVRXEZLU")
+
+        let picked = Set(store.accounts.filter { $0.displayName != "Acme Cloud" }.map(\.id))
+        #expect(picked.count == 2)
+
+        let entries = store.backupEntries().filter { picked.contains($0.id) }
+        #expect(entries.count == 2)
+        #expect(Set(entries.map(\.displayName)) == ["GitHub", "Homelab"])
+
+        // 一次加密即可承载多个账户
+        let data = try BackupArchive.encrypt(
+            BackupArchive.Document(accounts: entries),
+            password: "multi account password"
+        )
+        let document = try BackupArchive.decrypt(data, password: "multi account password")
+        #expect(document.accounts.count == 2)
     }
 
     @Test("账户标签：有发行方 → 「发行方：账户名」；缺失/与名称相同 → 仅名称")

@@ -253,7 +253,7 @@ struct RootView: View {
                 accounts: store.accounts,
                 errorMessage: $backupSheetError,
                 onCancel: dismissBackupSheet,
-                onExport: exportBackup(password:onlyID:)
+                onExport: exportBackup(password:onlyIDs:)
             )
         case .importBackup:
             BackupImportSheet(
@@ -266,7 +266,7 @@ struct RootView: View {
                 accounts: store.accounts,
                 errorMessage: $backupSheetError,
                 onCancel: dismissBackupSheet,
-                onExport: exportGAMigration(onlyID:)
+                onExport: exportGAMigration(onlyIDs:)
             )
         case nil:
             EmptyView()
@@ -280,9 +280,9 @@ struct RootView: View {
 
     /// 导出：口令 → PBKDF2 → AES-GCM → 保存面板写盘（0600）
     ///
-    /// - Parameter onlyID: nil = 导出全部账户；非 nil = 只导出该账户
-    private func exportBackup(password: String, onlyID: UUID?) {
-        let entries = store.backupEntries().filter { onlyID == nil || $0.id == onlyID }
+    /// - Parameter onlyIDs: nil = 导出全部账户；非 nil = 只导出集合内的账户（可多选）
+    private func exportBackup(password: String, onlyIDs: Set<UUID>?) {
+        let entries = store.backupEntries().filter { onlyIDs == nil || onlyIDs!.contains($0.id) }
         let document = BackupArchive.Document(accounts: entries)
 
         let data: Data
@@ -295,7 +295,7 @@ struct RootView: View {
 
         let panel = NSSavePanel()
         panel.title = "导出加密备份"
-        panel.nameFieldStringValue = backupFileName(onlyID: onlyID)
+        panel.nameFieldStringValue = backupFileName(onlyIDs: onlyIDs, count: entries.count)
         panel.begin { response in
             Task { @MainActor in
                 guard response == .OK, let url = panel.url else { return }   // 取消：留在弹窗
@@ -306,7 +306,8 @@ struct RootView: View {
                         ofItemAtPath: url.path
                     )
                     dismissBackupSheet()
-                    if let onlyID, let account = store.accounts.first(where: { $0.id == onlyID }) {
+                    if let onlyIDs, onlyIDs.count == 1, let id = onlyIDs.first,
+                       let account = store.accounts.first(where: { $0.id == id }) {
                         toast.show("已导出「\(account.displayName)」")
                     } else {
                         toast.show("已导出 \(entries.count) 个账户")
@@ -318,15 +319,19 @@ struct RootView: View {
         }
     }
 
-    /// 备份文件名：全部 = 2way-backup-<时间>；单个 = 2way-<账户名>-<时间>
-    private func backupFileName(onlyID: UUID?) -> String {
+    /// 备份文件名：全部 = `2way-backup-<时间>`；单个 = `2way-<账户名>-<时间>`；
+    /// 多个 = `2way-backup-<N>keys-<时间>`
+    private func backupFileName(onlyIDs: Set<UUID>?, count: Int) -> String {
         let stamp = Self.fileStamp()
-        guard let onlyID,
-              let account = store.accounts.first(where: { $0.id == onlyID })
-        else {
+        guard let onlyIDs else {
             return "2way-backup-\(stamp).2wbackup"
         }
-        return "2way-\(Self.fileNameSafe(account.displayName))-\(stamp).2wbackup"
+        if onlyIDs.count == 1,
+           let id = onlyIDs.first,
+           let account = store.accounts.first(where: { $0.id == id }) {
+            return "2way-\(Self.fileNameSafe(account.displayName))-\(stamp).2wbackup"
+        }
+        return "2way-backup-\(count)keys-\(stamp).2wbackup"
     }
 
     /// 账户名 → 文件名安全串（去掉路径分隔符等非法字符并限长）
@@ -342,10 +347,10 @@ struct RootView: View {
     /// 导出 GA 迁移码：账户 → `otpauth-migration://` → 二维码 PNG
     ///
     /// 注意：迁移码是明文载荷（GA 格式只做 base64），弹窗已向用户明示风险。
-    /// - Parameter onlyID: nil = 全部账户；非 nil = 只导出该账户
-    private func exportGAMigration(onlyID: UUID?) {
+    /// - Parameter onlyIDs: nil = 全部账户；非 nil = 只导出集合内的账户（可多选）
+    private func exportGAMigration(onlyIDs: Set<UUID>?) {
         let entries = store.backupEntries()
-            .filter { onlyID == nil || $0.id == onlyID }
+            .filter { onlyIDs == nil || onlyIDs!.contains($0.id) }
             .map { entry in
                 OTPMigration.Entry(
                     displayName: entry.displayName,
@@ -381,7 +386,8 @@ struct RootView: View {
                         ofItemAtPath: url.path
                     )
                     dismissBackupSheet()
-                    if let onlyID, let account = store.accounts.first(where: { $0.id == onlyID }) {
+                    if let onlyIDs, onlyIDs.count == 1, let id = onlyIDs.first,
+                       let account = store.accounts.first(where: { $0.id == id }) {
                         toast.show("已导出「\(account.displayName)」的迁移码")
                     } else {
                         toast.show("已导出 GA 迁移码（\(entries.count) 个账户）")
