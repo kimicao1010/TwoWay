@@ -131,9 +131,16 @@
 | 读取 | 启动时一次 `SecItemCopyMatching`，`kSecMatchLimitAll` + `kSecReturnAttributes` + `kSecReturnData` 批量拉全量，内存缓存 |
 | 写入 | 单账户 `SecItemAdd` / `SecItemUpdate` / `SecItemDelete`，账户生命周期独立 |
 
-**必须实测确认的两点**（列入 C1-1 卡）
-1. macOS 上 `kSecClassGenericPassword` + `kSecMatchLimitAll` + `kSecReturnData` 能否一次返回全部 item 的 attrs 与 data。
-2. 是否启用 `kSecUseDataProtectionKeychain`：影响沙盒行为与钥匙串访问组，需与「是否沙盒化」一并决定。
+**必须实测确认的三点**（C1-1 已全部实证，见 `Tests/TwoWayTests/KeychainStoreTests.swift`）
+1. ✅ `SecItemAdd` 用 `kSecUseKeychain` 指定目标钥匙串 —— 可行
+2. ✅ 查询类调用（CopyMatching / Update / Delete）改用 `kSecMatchSearchList` 注入目标钥匙串 —— 可行。
+   注意 `kSecUseKeychain` **不能**出现在查询字典里、`kSecMatchSearchList` **不能**出现在 Add 字典里，混用即 `errSecParam(-50)`
+3. ⚠️ **原假设「启动时一次 `kSecMatchLimitAll` 批量拉全量（含 secret）」不成立**：
+   `kSecMatchLimitAll` + `kSecReturnData` 被 macOS 拒绝（`-50`，系统不允许一次性批量倒出所有密码数据）。
+   修正后的设计（也更安全）：
+   - `readAllMetadata()` → `kSecMatchLimitAll` + `kSecReturnAttributes`，**只取元数据**，渲染列表不碰密钥
+   - `read(id:)` → 默认 `kSecMatchLimitOne` + `kSecReturnData`，**取码时才逐条取密钥**
+4. 是否启用 `kSecUseDataProtectionKeychain`：影响沙盒行为与钥匙串访问组。**本方案不启用**（见下），因此 `kSecAttrAccessible` / `kSecAttrAccessGroup` 在 legacy macOS 钥匙串上不生效，访问控制交由系统默认 ACL（「创建者应用」）—— 这正是 §9 依赖的 DR 绑定机制
 
 **S1–S3 落地清单**
 - [ ] 密钥不出现在任何 `print` / `os_log` / `Logger` 调用中（日志只允许账户 UUID）

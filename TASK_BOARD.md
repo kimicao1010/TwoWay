@@ -13,9 +13,9 @@
 
 | 卡 | 状态 | 内容 | 完成判据 | 提交 |
 |---|---|---|---|---|
-| C0-1 | `[x]` | `project.yml` → App target，最低 macOS 14.0 | `xcodegen generate` 成功、空窗可编译 | `ffcef2c` 之后 |
-| C0-1b | `[~]` | 创建自签代码签名证书并接入构建（§9.3） | `codesign -d -r- App.app` 输出**不含 `cdhash H"..."`** | 待执行 |
-| C0-2 | `[~]` | `Tokens.swift`（§8 全量）+ 基础组件 | 组件可独立预览，取值与 §8 逐项对齐 | — |
+| C0-1 | `[x]` | `project.yml` → App target，最低 macOS 14.0 | `xcodegen generate` 成功、空窗可编译 | `8c3681d` |
+| C0-1b | `[x]` | 创建自签代码签名证书并接入构建（§9.3） | `codesign -d -r- App.app` 输出**不含 `cdhash H"..."`** → 实测 DR = `identifier "com.kimi.2way" and certificate root = H"88f7f892…"` ✅ | 本次 |
+| C0-2 | `[~]` | `Tokens.swift`（§8 全量）+ 基础组件 | 组件可独立预览，取值与 §8 逐项对齐 | `8c3681d` |
 | C0-3 | `[ ]` | `spike-window`：窗口 400×700 + hiddenTitleBar + 圆角/交通灯实测 | 出截图 + 圆角实现方式结论 | — |
 
 **C0-2 明细**
@@ -39,16 +39,23 @@
 
 ---
 
-## 阶段 1 · 引擎（纯逻辑，可单测）
+## 阶段 1 · 引擎（已完成 ✅ 66 个测试全绿）
 
-| 卡 | 状态 | 内容 | 完成判据 |
-|---|---|---|---|
-| C1-1 | `[ ]` | `KeychainStore`（D3 方案 A）+ 往返单测 | 加/查/删/批量拉取全通过；§4.2 两项行为实测确认 |
-| C1-2 | `[ ]` | `TOTPEngine` + RFC 6238 标准向量单测 | 向量全绿（T=59 → `287082`），含边界与清洗用例 |
-| C1-3 | `[ ]` | `OTPAuthURI` 解析器 + URL 单测 | 覆盖 otpauth 合法/非法/缺参 |
-| C1-4 | `[ ]` | `ClockTicker` 单一时钟源 | 7 订阅者同一 tick，无漂移 |
+| 卡 | 状态 | 内容 | 完成判据 | 测试 |
+|---|---|---|---|---|
+| C1-1 | `[x]` | `KeychainStore`（D3 方案 A） | 加/查/删/批量全通过；§4.2 三项行为全部实证 | `KeychainStoreTests`（临时钥匙串，不碰登录钥匙串） |
+| C1-2 | `[x]` | `TOTPEngine` + `Base32` | RFC 6238 附录 B 向量全绿（SHA1/SHA256/SHA512 × 6 时间点 × 2 位宽 = 36 条） | `TOTPEngineTests`、`Base32Tests` |
+| C1-3 | `[x]` | `OTPAuthURI` 解析器 | 合法/缺参/非 otpauth（E10）/HOTP 拦截/percent-encode 全覆盖 | `OTPAuthURITests` |
+| C1-4 | `[x]` | `TOTPTime` 单一换算源 | counter 边界、progress 单调、T4 阈值边界精确 | `TOTPTimeTests` |
+| — | `[x]` | `Domain`：`Account` / `OTPParameters` | FR-03 匹配、参数校验、S1 调试脱敏 | `AccountTests` |
 
-> 阶段 1 结束前需建测试 target。测试只覆盖 `Services/` 与 `Domain/`，不碰 UI。
+**测试基建**：`Tests/TwoWayTests/`，Swift Testing（`#expect` / `#require`）。
+KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程不碰登录钥匙串。
+
+**C1-1 过程中实证到的平台硬约束**（已回写 TECH_PLAN §4.2）：
+`kSecUseKeychain` 只对 `SecItemAdd` 生效；`kSecMatchSearchList` 只对查询类调用生效；
+**`kSecMatchLimitAll` + `kSecReturnData` 会被拒（-50）** —— 批量只能取属性，密钥必须逐条取。
+由此把「启动一次拉全量含密钥」改为「启动拉元数据 + 取码时逐条取密钥」，安全形态更好。
 
 ---
 

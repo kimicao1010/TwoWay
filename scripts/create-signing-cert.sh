@@ -24,7 +24,7 @@ VALID_DAYS="${SIGNING_DAYS:-3650}"
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 
-bold "==> [1/6] 检查是否已存在身份「$CN」"
+bold "==> [1/6] 检查是否已存在身份 ${CN}"
 # 注意：必须去掉 -v。自签根不受系统信任，会报 CSSMERR_TP_NOT_TRUSTED，
 # 带 -v 时被隐藏，看起来像"没有证书"。
 if security find-identity -p codesigning 2>/dev/null | grep -qF "$CN"; then
