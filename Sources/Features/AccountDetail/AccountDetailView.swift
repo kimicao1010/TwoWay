@@ -196,7 +196,8 @@ struct AccountDetailView: View {
 
     private func copyCode() {
         guard let account, let code = store.code(for: account.id) else { return }
-        toast.show(Clipboard.copyString(code) ? "验证码已复制" : "复制失败，请手动复制")
+        // S4：复制后 30s 自动清除（仅当我们仍是剪贴板持有者）
+        toast.show(ClipboardGuard.shared.copy(code) ? "验证码已复制" : "复制失败，请手动复制")
     }
 
     // MARK: 删除确认弹窗（FR-06：必经二次确认，文案明示不可恢复）

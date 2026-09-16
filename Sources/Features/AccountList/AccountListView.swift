@@ -85,11 +85,11 @@ struct AccountListView: View {
         .frame(height: Token.Metrics.footerHeight)
     }
 
-    // MARK: R1 复制（成功返回 true 供行闪烁；E1 失败 toast 不静默）
+    // MARK: R1 复制（成功返回 true 供行闪烁；E1 失败 toast 不静默；S4 到期自动清除）
 
     private func copy(_ account: Account) -> Bool {
         guard let code = store.code(for: account.id) else { return false }
-        if Clipboard.copyString(code) {
+        if ClipboardGuard.shared.copy(code) {
             toast.show("验证码已复制")
             return true
         } else {
