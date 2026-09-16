@@ -20,6 +20,8 @@ settings:
     # 「module built without '-enable-testing'」
     Debug:
       ENABLE_TESTABILITY: YES
+      # xcodegen 默认不定义 DEBUG 条件编译标志，#if DEBUG 全部失效
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
 
 targets:
   TwoWay:

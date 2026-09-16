@@ -30,6 +30,7 @@ struct RootView: View {
             height: Token.Metrics.windowHeight
         )
         .background(Token.Palette.winBg)
+        .background(WindowConfigurator())
         .ignoresSafeArea()
     }
 }
