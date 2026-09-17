@@ -77,7 +77,7 @@ struct AddAccountView: View {
                 }
                 .padding(Token.Metrics.pagePadding)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)   // 铁律：勿用 `.hidden`（仍创建 scroller 并占 17px）
         }
         .onAppear {
             if let editing {

@@ -108,6 +108,7 @@
 | 状态管理 | `@Observable` 单一 `AccountStore` | 列表/编辑/弹窗共享同一份数据，避免多源不一致 |
 | 行展开状态 | `openedRowID: Account.ID?`（单值） | R9「同时最多一行展开」由类型天然保证，无需手动收敛 |
 | 密钥形态 | 全程 `Data`，不出 `KeychainStore` | 降低进入崩溃报告/日志的概率 |
+| 滚动容器 | **一律 `.scrollIndicators(.never)`** | 铁律（源自《滚动条去除方法论》）：`.never` = 根本不创建 scroller（`has=0`/`scroller=nil`/占位 0）；`.hidden` = 只藏起来，**仍创建并占位 17px**，会让内容左右微移；两者叠加还会自相抵消。禁止 `showsIndicators:`（软废弃）。**踩坑成本**：本项目列表页正是这个写法，导致滚动条常驻 + 内容右移 17px |
 
 ---
 

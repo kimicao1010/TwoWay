@@ -127,7 +127,10 @@ private struct AccountRows: View {
             .padding(.horizontal, Token.Metrics.listPaddingH)
             .padding(.vertical, Token.Metrics.listPaddingV)
         }
-        .scrollIndicators(.hidden)
+        // 铁律：滚动容器一律 `.never` —— 不创建 scroller（has=0 / scroller=nil / 占位 0px）。
+        // 勿改回 `.hidden`：它只把滚动条藏起来，占位与创建照旧（实测挤压裁剪区 17px，
+        // 会使内容左右微移）。取证：`--scroll-probe <path>`（DEBUG 自报 NSScrollView 几何）。
+        .scrollIndicators(.never)
     }
 }
 

@@ -160,6 +160,11 @@ struct RootView: View {
             if ProcessInfo.processInfo.arguments.contains("--debug-toast") {
                 toast.show("已复制")
             }
+            // --scroll-probe <path>：把窗口内所有 NSScrollView 的几何自报到 JSON（滚动条取证）
+            if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--scroll-probe"),
+               index + 1 < ProcessInfo.processInfo.arguments.count {
+                ScrollProbe.schedule(outputPath: ProcessInfo.processInfo.arguments[index + 1])
+            }
             // --debug-import-file <path>：启动即模拟「拖入图片解码 → 导入」完整链路
             // （手工回归用：免掉无障碍权限下无法程序化拖放的局限）
             if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--debug-import-file"),

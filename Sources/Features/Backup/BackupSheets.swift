@@ -62,7 +62,7 @@ struct ExportScopePicker: View {
                 }
             }
             .frame(maxHeight: 132)
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)   // 铁律：勿用 `.hidden`（仍创建 scroller 并占 17px）
             .padding(.bottom, 6)
         }
         .background(Token.Palette.input)
