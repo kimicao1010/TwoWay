@@ -32,14 +32,24 @@ final class AccountStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    /// 密钥内存缓存：启动时逐条读入（Keychain 不支持批量倒出密码数据，见 §4.2）
-    private var secretCache: [UUID: Data] = [:]
+    // ⚠️ 四个缓存一律 `@ObservationIgnored`（2026-09-17 崩溃修复）：
+    //
+    // 它们会在**视图 body 求值期间**被写入（`displayCode` → `formattedCode` 命中/回填缓存、
+    // `retrySecret` 回填缓存）。若参与 Observation 追踪，写操作会在 SwiftUI 更新事务中途
+    // 触发失效 → `AttributeGraph precondition_failure` → SIGABRT。
+    // 之前只有一个 scene（主窗口）时侥幸未崩；加上状态栏面板 / 预览窗后立刻复现。
+    //
+    // 刷新语义不受影响：码文本由 `CodePulse`（换码）驱动，环由 `RingClock` 直驱，
+    // 都不依赖这些缓存的观察通知。
+
+    /// 密钥内存缓存：启动时逐条读入
+    @ObservationIgnored private var secretCache: [UUID: Data] = [:]
     /// 验证码缓存：同一周期内不重算（P-1，30Hz 刷新时避免每帧做 HMAC）
-    private var codeCache: [UUID: (counter: UInt64, code: String)] = [:]
-    /// 密钥读取失败的账户（如钥匙串 ACL 未授权）—— 列表仍然展示，码显示占位
-    private var secretUnavailable: Set<UUID> = []
-    /// 失败重试冷却：避免 30Hz 渲染里反复触发钥匙串调用
-    private var lastRetryTime: [UUID: Date] = [:]
+    @ObservationIgnored private var codeCache: [UUID: (counter: UInt64, code: String)] = [:]
+    /// 密钥读取失败的账户（如文件损坏/缺失）—— 列表仍然展示，码显示占位
+    @ObservationIgnored private var secretUnavailable: Set<UUID> = []
+    /// 失败重试冷却：避免 30Hz 渲染里反复触发读取
+    @ObservationIgnored private var lastRetryTime: [UUID: Date] = [:]
     private static let retryCooldown: TimeInterval = 3
 
     init(

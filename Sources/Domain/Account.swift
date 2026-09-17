@@ -30,6 +30,14 @@ struct Account: Identifiable, Hashable, Sendable, Codable {
 }
 
 extension Account {
+    /// 「发行方：账户名」表述（发行方缺失或与名称相同时只显示名称）
+    ///
+    /// 列表行（PRD §7.1）、状态栏下拉、导出范围选择器共用同一口径。
+    var issuerQualifiedName: String {
+        guard let issuer, !issuer.isEmpty, issuer != displayName else { return displayName }
+        return "\(issuer)：\(displayName)"
+    }
+
     /// 搜索匹配（PRD FR-03）：账户名或发行方，不区分大小写
     func matches(query rawQuery: String) -> Bool {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)

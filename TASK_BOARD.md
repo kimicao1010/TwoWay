@@ -3,7 +3,7 @@
 > 卡粒度与验收判据以 `TECH_PLAN.md` §6 为准。**每卡必须完成：构建 + 单测 + Git 提交**，才推进下一卡。
 > 新增文件后执行 `xcodegen generate` 收录。
 >
-> 需求版本：**PRD v1.3**（2026-09-16：v1.1 移除摄像头扫码（D7）；v1.2 窗口 400×732（D8）；v1.3 裁剪 P1 —— 触控板双指横滑 / 全局快捷键不做，S1 按 D9 修订）
+> 需求版本：**PRD v1.9**（v1.1 移除摄像头扫码；v1.2 窗口 400×732；v1.3 裁剪 P1；v1.5 列表交互精简；v1.6/v1.7 导出范围与多选；v1.8 移除详情页 + 删除就地确认；**v1.9 状态栏常驻 + 下拉快速取码**）
 
 ## 变更记录
 
@@ -39,7 +39,7 @@
 - [x] `.hiddenTitleBar` 必须补 `.fullSizeContentView`，否则内容下方空 32pt
 - [x] `makeNSView` 里 async 取 `view.window` 拿不到 → 必须用 `viewDidMoveToWindow`
 - [x] **已拍板：接受 400×732**（决策 D8 / PRD v1.2），32pt 归列表区
-- [ ] 截图存档（脚本 `scripts/measure-window.swift` / `fit-corner.swift` / `bbox.swift` 可复跑）
+- [x] 截图不入库（仓库只留可复跑脚本）：`scripts/measure-window.swift` / `fit-corner.swift` / `bbox.swift` 随时可复现 C0-3 的全部实测
 
 ---
 
@@ -68,13 +68,13 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 卡 | 状态 | 内容 | 完成判据 |
 |---|---|---|---|
 | C2-1 | `[x]` | 列表页：搜索（FR-03）、计数、悬停、空态（E2/E7） | 输入即过滤，计数同步 |
-| **C2-2** | `[~]` | **`spike-swipe`：R1–R11 全量 + 手工回归清单** —— 状态机 `SwipeRowModel`（State 层，8 个单测）+ `SwipeableAccountRow`（手势 + 操作块）已落地 | **逻辑级单测全绿；R1–R11 手工回归清单待执行（RK1 的真实手势验证）** |
+| **C2-2** | `[x]` | **`spike-swipe`：R1–R11 全量 + 手工回归清单** —— 状态机 `SwipeRowModel`（State 层，8 个单测）+ `SwipeableAccountRow`（手势 + 操作块） | **逻辑级单测全绿 + 手工回归已通过（用户 2026-09-17 确认「功能测试没有问题」）** |
 | C2-3 | `[x]` | 复制 + toast + E1 失败路径 | 随 C2-1 落地；R1 闪烁 650ms 补齐于 C2-2 |
-| C2-5 | `[~]` | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 —— \`AddAccountView\`（分段外壳 + 导入占位）+ \`ManualEntryView\` + \`ManualEntryModel\`（9 单测）；106 测试全绿 | 剩：手工回归（输入密钥看预览刷新 / E4 报错 / 提交置顶 + toast） |
-| C2-6 | `[~]` | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填 —— \`QRImageDecoder\`（Vision，面积降序）+ \`QRImport.resolve\`（E9/E10/无效 otpauth）+ \`ImportImageView\`（拖放悬停态/缩略图/原地报错/NSOpenPanel）+ \`ManualEntryModel.prefill\`；114 测试全绿（含 CIQRCodeGenerator 真实二维码往返 + 双码合成图） | 剩：手工回归（Finder 拖入真实截图 / HEIC / 损坏图片）；**Info.plist 无 `NSCameraUsageDescription` 已验证 ✅** |
+| C2-5 | `[x]` | 手动输入页：校验 E3/E4 + 实时预览 + 高级选项折叠 —— `AddAccountView`（分段外壳）+ `ManualEntryView` + `ManualEntryModel`（9 单测） | 手工回归已通过（用户 2026-09-17 确认） |
+| C2-6 | `[x]` | **导入图片页**：拖放 + 选择文件 + Vision 解码 + 预填 —— `QRImageDecoder`（Vision，面积降序）+ `QRImport.resolve`（E9/E10/无效 otpauth）+ `ImportImageView`；114 测试全绿 | 手工回归已通过（用户 2026-09-17 确认，含 GA 迁移码真实截图端到端）；**Info.plist 无 `NSCameraUsageDescription` ✅** |
 | ~~C2-7~~ | `[-]` | ~~详情页：身份区 + 168 大环 + 参数卡 + 操作区~~ —— **v1.8 用户实测决策移除**（`AccountDetailView` 已删除，PRD §7.5 标注废弃） | 不适用（参数核对改由左滑「编辑」承担） |
 | C2-8 | `[x]` | 删除确认弹窗（FR-06）—— **v1.8 改为就地覆盖列表**：`DeleteConfirmDialog`（遮罩 0.65 / 304 宽 / 标题明示账户名 / 文案明示不可恢复 / 取消+红底删除 / Esc 与遮罩关闭）；左滑「删除」直接弹窗，确认后留在列表 + toast | 必经二次确认 ✅ 截图验证；无切屏 ✅ |
-| C2-4 | `[x]` | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5）—— **用户实测：与 GA 并排比对逐秒一致（T6 ✅）**；列表/详情环、T4 告警态截图确认 | 与 \`index.html\` 并排逐秒一致 ✅（用户 2026-09-16 确认） |
+| C2-4 | `[x]` | 倒计环 + 告警态（T4）+ 跨周期无闪烁（T5）—— **用户实测：与 GA 并排比对逐秒一致（T6 ✅）**；列表环与 T4 告警态截图确认（详情大环随 v1.8 详情页移除） | 与 \`index.html\` 并排逐秒一致 ✅（用户 2026-09-16 确认） |
 
 **C2-2 明细（R1–R11 → 实现映射）**
 
@@ -90,16 +90,27 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | R8 点「删除」→ 就地弹确认 | `onDelete` → `router.pendingDeleteID`（不切屏）；确认走 `AccountStore.delete` + toast（v1.8） |
 | R9 同时最多一行展开 | `store.openedRowID` 单值互斥；本行确认拖拽即收起其他行（对齐 Demo pointerdown 行为） |
 | R10 拖拽中关过渡跟手、禁止文本选中 | `.animation(isDragging ? nil : settle)`；`textSelection(.disabled)` |
-| R11 悬停浮现复制图标、点击不冒泡 | 复制图标为独立 Button（吞掉点击），行底 hover `#232528` |
+| ~~R11 悬停浮现复制图标~~ | **v1.5 已移除**：复制唯一入口 = 单击整行；悬停仅保留行底 `#232528`（用户结论：图标是多余的第二入口） |
 
-**C2-2 手工回归清单（待执行）**
+**C2-2 手工回归清单（已通过 · 用户 2026-09-17 确认「功能测试没有问题」）**
 
-- [ ] 鼠标左滑拖拽跟手，释放按阈值吸附/回弹，动画曲线无跳变
-- [ ] 拖拽后立即点按，不触发复制（R6，RK1 高风险项）
-- [ ] 竖向滚动列表时不触发行位移；右滑不错位
-- [ ] 展开行 A 后再拖行 B：A 收起、B 可展开；展开行点按仅收起不复制
-- [ ] 点「编辑」「删除」行复位；删除弹窗可在列表上直接取消/确认（不跳转）；悬停行底 `#232528` 可点击提示
-- [ ] 复制后行闪 `#2E3237` 650ms；告警态（≤5s）下复制照常（E6）
+- [x] 鼠标左滑拖拽跟手，释放按阈值吸附/回弹，动画曲线无跳变
+- [x] 拖拽后立即点按，不触发复制（R6，RK1 高风险项）
+- [x] 竖向滚动列表时不触发行位移；右滑不错位
+- [x] 展开行 A 后再拖行 B：A 收起、B 可展开；展开行点按仅收起不复制
+- [x] 点「编辑」「删除」行复位；删除弹窗可在列表上直接取消/确认（不跳转）；悬停行底 `#232528` 可点击提示
+- [x] 复制后行闪 `#2E3237` 650ms；告警态（≤5s）下复制照常（E6）
+
+---
+
+## 阶段 5 · 状态栏与系统集成
+
+| 卡 | 状态 | 内容 | 完成判据 |
+|---|---|---|---|
+| C5-1 | `[x]` | **状态栏常驻 + 下拉快速取码（P2 提前交付）** —— `TwoWayApp` 挂 `MenuBarExtra`（`.menuBarExtraStyle(.window)`，原生 `.menu` 放不下搜索框）+ `MenuBarView`（搜索框自动聚焦 / 回车复制首条 / **默认最多 5 条** + 「还有 N 个账户 —— 输入关键词搜索」/ 输入即全量过滤不受 5 条限制 / 行内「已复制」反馈 / 倒计环 / 底部「打开主窗口 + 账户数 + 退出」）；图标用用户提供的 `status-bar/StatusLockTemplate-16/32.png` → Asset Catalog `StatusBarIcon`（template 渲染，深浅菜单栏自适应）；`MenuBarSelection` 纯逻辑 + 7 单测；`AppBootstrap` 幂等引导（主窗口与状态栏共用同一 store，加载只做一次） | 菜单栏图标出现 ✅ 截图 / 默认态 5 条 + 隐藏数提示 ✅ 截图 / 搜索态突破 5 条 ✅ 截图 / 162 测试全绿 |
+| C5-2 | `[~]` | **系统级搜索（Spotlight）直接取码可行性调研** —— 结论：**可行，走 App Intents + App Shortcuts**（Spotlight / Siri / 快捷指令 / 操作按钮共享同一份 App Shortcuts）；**绝不把密钥或验证码写进任何索引**（违反 S1/S2，Spotlight 索引是明文库）。待用户拍板后做 spike | 见变更记录中的可行性结论与风险清单 |
+
+**C5-1 附带修复（重要）**：加状态栏后 App **启动即崩**（`AG::precondition_failure` → SIGABRT）。根因：`AccountStore` 在**视图 body 求值期间**写 `codeCache` / `secretCache` / `secretUnavailable` / `lastRetryTime` 这四个观察属性 —— 单 scene 时侥幸不崩，多 scene（主窗口 + 状态栏面板 + 预览窗各自一个 graph）后 Observation 在更新事务中途触发失效即 abort。修复：四个缓存全部标 `@ObservationIgnored`（刷新语义本来就由 `CodePulse` / `RingClock` 驱动，不依赖缓存的观察通知）。**教训：`@Observable` 类型里凡是「渲染路径上会被写」的缓存，必须 `@ObservationIgnored`。**
 
 ---
 
@@ -170,7 +181,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | C3-2b | `[x]` | **性能复核（C4-9）**：区分「窗口可见 / 被遮挡」后重测 —— **可见 ≈ 1–2.6%（4 环），被遮挡 ≈ 0.2%**（此前 0.4% 实为遮挡节流值）。对策：新增 `CodePulse`（换码脉冲）替代列表的 1Hz 刷新（列表不显示秒数，只需在换码时刷新），并把环的 layer 几何改为「无变化不重设」。残余成本主要为**持续动画的每帧合成**，属 T3「连续平滑」的固有代价；P-1「<1%」仅在遮挡态成立，已在 C3-2b 如实记录 |
 | C3-2 | `[x]` | 性能实测（M1 Pro，Release，5 环稳态）—— **初测 36% → 优化后 0.4-0.7%**。根因：SwiftUI `TimelineView(.animation)` 30Hz 全列表失效 + AppKit 全窗口 `layoutIfNeeded`（sample 实测主线程 2/3 在布局引擎）。修复：环改 `CAShapeLayer` + `RingClock` 30Hz 直驱 + 周期级 `CABasicAnimation`（GPU 插值）；码文本秒对齐 1Hz。RSS ≈ 92MB / 4 线程 | CPU < 1% ✅ |
 | C3-3 | `[x]` | 安全自查（D9 修订版）—— wallet.bin 密文无明文特征 ✅ / master.key+wallet.bin 0600、目录 0700（含单测）✅ / Sources 零 print·os_log·Logger·NSLog ✅ / 进程参数无密钥 ✅ / Account.debugDescription 脱敏（单测）✅ | ✅（§4.2 清单按 D9 修订后全勾） |
-| C3-4 | `[x]` | Release：archive → 全组件重签 → DR 校验 → UDZO → 校验 → 挂载实测 —— `dist/2way-0.1.0.dmg`（908K），DR = `identifier "com.kimi.2way" and certificate root H"88f7f892…"`，挂载后签名校验通过 | `dist/2way-*.dmg` 可挂载运行 ✅ |
+| C3-4 | `[x]` | Release：archive → 全组件重签 → DR 校验 → UDZO → 校验 → 挂载实测 —— `dist/2way-0.1.0.dmg`（≈1.26MB，含 App 图标），DR = `identifier "com.kimi.2way" and certificate root H"88f7f892…"`，挂载后签名校验通过 | `dist/2way-*.dmg` 可挂载运行 ✅ |
 
 ---
 
@@ -195,6 +206,9 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | 日期 | 变更 |
 |---|---|
+| 2026-09-17 | **功能验收通过（用户确认）**：用户 2026-09-17「当前版本，功能测试目前没有问题了」→ **C2-2 / C2-5 / C2-6 由 `[~]` 转 `[x]`，RK1（R6 拖拽补发 click）关闭**；同步清理陈旧条目（R11 悬停复制图标已于 v1.5 移除、C2-4 不再含详情环、C3-4 的 DMG 体积更新为含图标后的 ≈1.26MB、C0-3「截图存档」明确为「不入库、脚本可复跑」）；RK3/RK4/RK5 一并关闭 |
+| 2026-09-17 | **C5-1 状态栏常驻 + 下拉快速取码（P2 提前交付，PRD v1.9）**：`TwoWayApp` 挂 `MenuBarExtra`（`.menuBarExtraStyle(.window)` —— 原生 `.menu` 承载不了搜索框）；新增 `MenuBarView`：搜索框打开即聚焦、**默认最多列 5 条**（`MenuBarSelection` 纯逻辑 + 7 单测）、超出时提示「还有 N 个账户 —— 输入关键词搜索」、**输入关键词后不再受 5 条限制**、点行即复制（走 `ClipboardGuard`，S4 30s 自动清除）、行内「已复制/复制失败」反馈 + 倒计环、回车复制首条、底部「打开主窗口 / N 个账户 / 退出」；状态栏图标用用户提供的 `status-bar/` 素材（16/32 → Asset Catalog `StatusBarIcon`，template 渲染，深浅菜单栏自适应）；`AppBootstrap` 幂等引导 + `store` 所有权上移到 `TwoWayApp`（主窗口与状态栏共用同一数据源）；调试项 `--debug-menubar`（面板预览窗，菜单栏面板无法按窗口 ID 截取）+ `--debug-menubar-query`（搜索态截图）；测试 155 → 162 全绿 |
+| 2026-09-17 | **C4-15 多 scene 崩溃修复（加状态栏后暴露的隐患）**：现象「启动即 SIGABRT」；崩溃栈 `AG::precondition_failure` ← `AccountStore.codeCache.modify` ← `formattedCode` ← `AccountRows.body`。根因：`AccountStore` 在**视图 body 求值期间写观察属性**（取码缓存 / 密钥缓存 / 失败集合 / 重试时间），单 scene 时侥幸不崩，多 scene 后 Observation 在更新事务中途失效 → abort。修复：四个缓存全部 `@ObservationIgnored`（刷新由 `CodePulse`/`RingClock` 驱动，不依赖观察通知）；顺带把 `Account` 的「发行方：账户名」口径抽成 `issuerQualifiedName` 供列表 / 状态栏 / 导出选择器共用 |
 | 2026-09-16 | 项目立项；阶段 0 启动；PRD v1.0 |
 | 2026-09-16 | **C2-1 列表页落地**：\`AccountStore\`（加载/搜索/计数/置顶/取码缓存）+ \`AccountListView\`（搜索/行/悬停/点按复制/Toast）；\`SecretStoring\` 协议抽象出可注入的存储层；窗口四角圆角由 \`clipShape\` 兜底（SwiftUI 恒定给窗口加 32pt 隐形标题栏，底边落在窗口中部、系统不在那里画圆角）
 | 2026-09-16 | **PRD v1.1：移除摄像头扫码，添加账户改为仅「图片导入 + 手动输入」**。页面 02 由「扫描二维码」改为「导入图片」；取景框/取景括号/扫描线动画废弃；不再申请摄像头权限。影响：C2-6 重定义、RK2 关闭并新增 RK2b、D1 依据更换（结论不变）、D7 新增 |
@@ -230,10 +244,10 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | # | 风险 | 等级 | 应对 |
 |---|---|---|---|
-| RK1 | 左滑 R6「拖拽后补发的 click 被吞掉」在 SwiftUI 下可能偶发失效 | 高 | 已实现双保险（DragGesture minimumDistance + 0.15s 抑制窗口）+ 8 个单测；**待手工回归确认真实手势下行为**；仍保留 `NSPanGestureRecognizer` 备选 |
+| RK1 | ~~左滑 R6「拖拽后补发的 click 被吞掉」在 SwiftUI 下可能偶发失效~~ | **已关闭** | 双保险（DragGesture minimumDistance + 0.15s 抑制窗口）+ 8 单测；**用户 2026-09-17 手工回归通过**（未出现误复制），`NSPanGestureRecognizer` 备选不再需要 |
 | RK2 | ~~`AVCaptureMetadataOutput` 运行时对 `.qr` 的支持依赖设备~~ | **已关闭** | v1.1 移除摄像头，不适用 |
 | RK2b | Vision 成为**唯一**解码路径，无兜底；对低质量 / 畸变 / 缩放图片的识别率未知 | 中 | C2-6 用真实截图样本集实测（手机截图、裁剪、含透视畸变）；必要时加 `CIFilter` 预处理 |
-| RK3 | 系统窗口圆角与 PRD 12px 存在差值 | 中 | C0-3 出实测差值 |
-| RK4 | `SecItemCopyMatching` 批量返回行为与预期不符 | 中 | C1-1 先写最小验证脚本 |
-| RK5 | 等价字体与设计稿有字距/字重差异 | 低 | C3-1 列差异项并处置 |
+| RK3 | ~~系统窗口圆角与 PRD 12px 存在差值~~ | **已关闭** | C0-3 实测 ≈12~13px（差 ≤1px，肉眼不可辨），按等价替代接受 |
+| RK4 | ~~`SecItemCopyMatching` 批量返回行为与预期不符~~ | **已关闭** | 结论已被 D9 取代（弃用 Keychain，改加密文件）；C1-1 的实测结论仍保留在 TECH_PLAN §4.2 供参考 |
+| RK5 | ~~等价字体与设计稿有字距/字重差异~~ | **已关闭** | C3-1 差异清单已列出并决策（PingFang SC / SF Mono 等价替代） |
 | RK6 | E5 系统时间不准导致验证码偏差 | 低 | P0 仅提示；P1 做偏移显示 |

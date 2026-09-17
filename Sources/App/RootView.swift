@@ -5,9 +5,9 @@ import SwiftUI
 /// 屏幕路由由 `AppRouter` 驱动（TECH_PLAN §3）；共享 Toast 渲染在本层，
 /// 列表（复制反馈）与添加页（已添加提示）共用同一个 `ToastCenter`。
 struct RootView: View {
-    /// 生产路径：加密文件存储（D9，用户决策弃用 Keychain —— 本机钥匙串 ACL
-    /// 逐条弹授权框不可接受）。安全边界见 EncryptedStore 类注释。
-    @State private var store = AccountStore(secrets: EncryptedStore())
+    /// 由 `TwoWayApp` 持有并注入：与状态栏下拉共用同一实例（单一数据源）
+    let store: AccountStore
+
     @State private var router = AppRouter()
     @State private var toast = ToastCenter()
     /// U3：DEBUG 调试切屏用（--debug-import）
@@ -20,6 +20,8 @@ struct RootView: View {
     @State private var listUsesOpacityTransition = false
     /// 备份弹窗内的错误文案（口令错误 / 文件损坏等，就地提示不静默）
     @State private var backupSheetError: String?
+    /// 调试用：打开状态栏面板预览窗（`--debug-menubar`）
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ZStack {
@@ -132,9 +134,9 @@ struct RootView: View {
             #endif
         }
         .onAppear {
-            RingClock.shared.start()   // 全局唯一时钟：环与码文本共用（T5/T6）
+            // 幂等引导：全局时钟 + 首次读盘（状态栏下拉也会触发，故必须幂等）
             do {
-                try store.load()
+                try AppBootstrap.start(store: store)
                 loadErrorText = nil
             } catch {
                 #if DEBUG
@@ -173,6 +175,10 @@ struct RootView: View {
             // --debug-toast：验证 toast 渲染（复制反馈等）
             if ProcessInfo.processInfo.arguments.contains("--debug-toast") {
                 toast.show("已复制")
+            }
+            // --debug-menubar：打开状态栏面板的预览窗口（面板本体在系统菜单栏，截图工具无法定位）
+            if ProcessInfo.processInfo.arguments.contains("--debug-menubar") {
+                openWindow(id: TwoWayApp.menuBarPreviewWindowID)
             }
             // --scroll-probe <path>：把窗口内所有 NSScrollView 的几何自报到 JSON（滚动条取证）
             if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--scroll-probe"),
@@ -552,5 +558,5 @@ struct RootView: View {
 }
 
 #Preview {
-    RootView()
+    RootView(store: AccountStore(secrets: EncryptedStore()))
 }
