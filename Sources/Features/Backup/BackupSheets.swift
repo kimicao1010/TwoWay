@@ -160,7 +160,7 @@ struct BackupExportSheet: View {
             }
         }
         .padding(Token.Metrics.pagePadding)
-        .frame(width: 380)
+        .frame(width: WindowMetrics.sheetWidth())
     }
 
     private func performExport() {
@@ -242,7 +242,7 @@ struct GAMigrationExportSheet: View {
             }
         }
         .padding(Token.Metrics.pagePadding)
-        .frame(width: 380)
+        .frame(width: WindowMetrics.sheetWidth())
     }
 
     private func performExport() {
@@ -302,7 +302,7 @@ struct BackupImportSheet: View {
             }
         }
         .padding(Token.Metrics.pagePadding)
-        .frame(width: 360)
+        .frame(width: WindowMetrics.sheetWidth(preferred: 360))
     }
 }
 

@@ -7,6 +7,8 @@ import SwiftUI
 struct RootView: View {
     /// 由 `TwoWayApp` 持有并注入：与状态栏下拉共用同一实例（单一数据源）
     let store: AccountStore
+    /// 应用偏好（隐藏 Dock 图标等）
+    let settings: AppSettings
 
     @State private var router = AppRouter()
     @State private var toast = ToastCenter()
@@ -22,6 +24,8 @@ struct RootView: View {
     @State private var backupSheetError: String?
     /// 调试用：打开状态栏面板预览窗（`--debug-menubar`）
     @Environment(\.openWindow) private var openWindow
+    /// 打开偏好设置（⌘, 同款入口）
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         ZStack {
@@ -115,7 +119,7 @@ struct RootView: View {
         .sheet(isPresented: isBackupSheetPresented) {
             backupSheetContent
         }
-        .frame(minWidth: Token.Metrics.windowWidth, maxWidth: Token.Metrics.windowWidth)
+        .frame(minWidth: WindowMetrics.width, maxWidth: WindowMetrics.width)
         .frame(minHeight: Token.Metrics.designedContentHeight, maxHeight: .infinity)
         .background(Token.Palette.winBg)
         // 窗口底角由我们自绘 12px（G-02）。
@@ -136,7 +140,7 @@ struct RootView: View {
         .onAppear {
             // 幂等引导：全局时钟 + 首次读盘（状态栏下拉也会触发，故必须幂等）
             do {
-                try AppBootstrap.start(store: store)
+                try AppBootstrap.start(store: store, settings: settings)
                 loadErrorText = nil
             } catch {
                 #if DEBUG
@@ -179,6 +183,15 @@ struct RootView: View {
             // --debug-menubar：打开状态栏面板的预览窗口（面板本体在系统菜单栏，截图工具无法定位）
             if ProcessInfo.processInfo.arguments.contains("--debug-menubar") {
                 openWindow(id: TwoWayApp.menuBarPreviewWindowID)
+            }
+            // --debug-settings：打开偏好设置（截图/回归用）
+            // 延后一拍 + 先激活：onAppear 阶段 Settings scene 可能尚未就绪
+            if ProcessInfo.processInfo.arguments.contains("--debug-settings") {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    NSApplication.shared.activate()
+                    openSettings()
+                }
             }
             // --scroll-probe <path>：把窗口内所有 NSScrollView 的几何自报到 JSON（滚动条取证）
             if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--scroll-probe"),
@@ -243,6 +256,10 @@ struct RootView: View {
                     Button("从备份导入…") {
                         backupSheetError = nil
                         router.backupSheet = .importBackup
+                    }
+                    Divider()
+                    Button("偏好设置…") {
+                        openSettings()
                     }
                     Divider()
                     Button("导出 GA 迁移码（PNG）…") {
@@ -558,5 +575,5 @@ struct RootView: View {
 }
 
 #Preview {
-    RootView(store: AccountStore(secrets: EncryptedStore()))
+    RootView(store: AccountStore(secrets: EncryptedStore()), settings: AppSettings())
 }

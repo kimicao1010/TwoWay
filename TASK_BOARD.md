@@ -108,7 +108,16 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | 卡 | 状态 | 内容 | 完成判据 |
 |---|---|---|---|
 | C5-1 | `[x]` | **状态栏常驻 + 下拉快速取码（P2 提前交付）** —— `TwoWayApp` 挂 `MenuBarExtra`（`.menuBarExtraStyle(.window)`，原生 `.menu` 放不下搜索框）+ `MenuBarView`（搜索框自动聚焦 / 回车复制首条 / **默认最多 5 条** + 「还有 N 个账户 —— 输入关键词搜索」/ 输入即全量过滤不受 5 条限制 / 行内「已复制」反馈 / 倒计环 / 底部「打开主窗口 + 账户数 + 退出」）；图标用用户提供的 `status-bar/StatusLockTemplate-16/32.png` → Asset Catalog `StatusBarIcon`（template 渲染，深浅菜单栏自适应）；`MenuBarSelection` 纯逻辑 + 7 单测；`AppBootstrap` 幂等引导（主窗口与状态栏共用同一 store，加载只做一次） | 菜单栏图标出现 ✅ 截图 / 默认态 5 条 + 隐藏数提示 ✅ 截图 / 搜索态突破 5 条 ✅ 截图 / 162 测试全绿 |
-| C5-2 | `[~]` | **系统级搜索（Spotlight）直接取码可行性调研** —— 结论：**可行，走 App Intents + App Shortcuts**（Spotlight / Siri / 快捷指令 / 操作按钮共享同一份 App Shortcuts）；**绝不把密钥或验证码写进任何索引**（违反 S1/S2，Spotlight 索引是明文库）。待用户拍板后做 spike | 见变更记录中的可行性结论与风险清单 |
+| ~~C5-2~~ | `[-]` | ~~系统级搜索（Spotlight）直接取码~~ —— **用户 2026-09-17 决策放弃**。调研结论留档（见 PRD §12 备注）：技术上可行（App Intents + App Shortcuts），但收益是「少点两下」而成本是新增意图/实体/索引面与分发依赖，与「缩小权限面与攻击面」的既定方向不一致 | 不适用 |
+
+---
+
+## 阶段 6 · 界面与偏好调整（2026-09-17 用户反馈）
+
+| 卡 | 状态 | 内容 | 完成判据 |
+|---|---|---|---|
+| C6-1 | `[~]` | **窗口宽度收窄比选** —— 用户反馈 400 太宽，要求「20 一档」出预览确认。已实现 `WindowMetrics`（DEBUG 启动参数 `--width <pt>` 运行时覆盖，260–420 合法区间，非法值回落）+ 弹窗宽度自适应（`sheetWidth`，避免 380 的 sheet 顶出窄窗口）+ 5 档对比图（400/380/360/340/320 实测截图合成，320 下布局未破） | **待用户拍板宽度** → 拍板后改 `Token.Metrics.windowWidth` 并同步 PRD G-01 |
+| C6-2 | `[x]` | **隐藏 Dock 图标设置** —— `AppSettings`（UserDefaults 持久化，键 `hideDockIcon`，非敏感信息）+ `Settings` scene（⌘, / 主窗口「⋯」→「偏好设置…」）+ 开关即时生效（`setActivationPolicy(.accessory / .regular)`，macOS 不支持运行时改 `LSUIElement`，这是官方等价手段）；4 个单测（默认值 / 持久化 / 策略映射 / 键名） | 实测：关闭时 `background only = false` 且 Dock 有挂锁图标；开启时 `background only = true`、Dock 无图标、菜单栏图标仍在 ✅ 截图；截图验证设置界面 ✅ |
 
 **C5-1 附带修复（重要）**：加状态栏后 App **启动即崩**（`AG::precondition_failure` → SIGABRT）。根因：`AccountStore` 在**视图 body 求值期间**写 `codeCache` / `secretCache` / `secretUnavailable` / `lastRetryTime` 这四个观察属性 —— 单 scene 时侥幸不崩，多 scene（主窗口 + 状态栏面板 + 预览窗各自一个 graph）后 Observation 在更新事务中途触发失效即 abort。修复：四个缓存全部标 `@ObservationIgnored`（刷新语义本来就由 `CodePulse` / `RingClock` 驱动，不依赖缓存的观察通知）。**教训：`@Observable` 类型里凡是「渲染路径上会被写」的缓存，必须 `@ObservationIgnored`。**
 
@@ -206,6 +215,9 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | 日期 | 变更 |
 |---|---|
+| 2026-09-17 | **C6-2 隐藏 Dock 图标设置落地**：新增 `AppSettings`（UserDefaults 键 `hideDockIcon`）+ `SettingsView`（SwiftUI `Settings` scene → ⌘, 与主窗口「⋯」菜单入口）+ `AppBootstrap` 启动时应用激活策略。**实现要点：macOS 无法运行时改 Info.plist 的 `LSUIElement`，等价手段是 `NSApp.setActivationPolicy(.accessory / .regular)`**，切换即时生效无需重启。实测两种状态（`background only` true/false、Dock 图标有无、菜单栏图标仍在）+ 设置界面截图；测试 162 → 170 全绿 |
+| 2026-09-17 | **C6-1 窗口宽度比选（进行中）**：用户反馈 400 太宽。新增 `WindowMetrics`（DEBUG `--width <pt>` 运行时覆盖 + 纯函数解析含 4 个单测：无参/合法/非法（非数字、越界、缺值））+ 三个弹窗宽度改 `WindowMetrics.sheetWidth(...)` 自适应（否则 380 宽的 sheet 在窄窗口下会顶出去）；按 20 一档出 5 档实测对比图（400/380/360/340/320，同数据同状态，裁掉阴影后横向拼接），320 下布局未破（行标题按需截断、码与环位置正常）。**待用户拍板后落定 `Token.Metrics.windowWidth`** |
+| 2026-09-17 | **C5-2 放弃（用户决策）**：系统级搜索（Spotlight / Siri / 快捷指令）直接取码的调研结论保留在 PRD §12 备注（可行路径 = App Intents + App Shortcuts；红线 = 密钥与验证码绝不进任何明文索引），但用户决定不做 —— 收益（少点两下）与新增的意图/索引面、分发依赖不成比例 |
 | 2026-09-17 | **功能验收通过（用户确认）**：用户 2026-09-17「当前版本，功能测试目前没有问题了」→ **C2-2 / C2-5 / C2-6 由 `[~]` 转 `[x]`，RK1（R6 拖拽补发 click）关闭**；同步清理陈旧条目（R11 悬停复制图标已于 v1.5 移除、C2-4 不再含详情环、C3-4 的 DMG 体积更新为含图标后的 ≈1.26MB、C0-3「截图存档」明确为「不入库、脚本可复跑」）；RK3/RK4/RK5 一并关闭 |
 | 2026-09-17 | **C5-1 状态栏常驻 + 下拉快速取码（P2 提前交付，PRD v1.9）**：`TwoWayApp` 挂 `MenuBarExtra`（`.menuBarExtraStyle(.window)` —— 原生 `.menu` 承载不了搜索框）；新增 `MenuBarView`：搜索框打开即聚焦、**默认最多列 5 条**（`MenuBarSelection` 纯逻辑 + 7 单测）、超出时提示「还有 N 个账户 —— 输入关键词搜索」、**输入关键词后不再受 5 条限制**、点行即复制（走 `ClipboardGuard`，S4 30s 自动清除）、行内「已复制/复制失败」反馈 + 倒计环、回车复制首条、底部「打开主窗口 / N 个账户 / 退出」；状态栏图标用用户提供的 `status-bar/` 素材（16/32 → Asset Catalog `StatusBarIcon`，template 渲染，深浅菜单栏自适应）；`AppBootstrap` 幂等引导 + `store` 所有权上移到 `TwoWayApp`（主窗口与状态栏共用同一数据源）；调试项 `--debug-menubar`（面板预览窗，菜单栏面板无法按窗口 ID 截取）+ `--debug-menubar-query`（搜索态截图）；测试 155 → 162 全绿 |
 | 2026-09-17 | **C4-15 多 scene 崩溃修复（加状态栏后暴露的隐患）**：现象「启动即 SIGABRT」；崩溃栈 `AG::precondition_failure` ← `AccountStore.codeCache.modify` ← `formattedCode` ← `AccountRows.body`。根因：`AccountStore` 在**视图 body 求值期间写观察属性**（取码缓存 / 密钥缓存 / 失败集合 / 重试时间），单 scene 时侥幸不崩，多 scene 后 Observation 在更新事务中途失效 → abort。修复：四个缓存全部 `@ObservationIgnored`（刷新由 `CodePulse`/`RingClock` 驱动，不依赖观察通知）；顺带把 `Account` 的「发行方：账户名」口径抽成 `issuerQualifiedName` 供列表 / 状态栏 / 导出选择器共用 |

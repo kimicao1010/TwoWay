@@ -16,9 +16,12 @@ struct TwoWayApp: App {
     /// 由 App 层持有：主窗口与状态栏下拉**共用同一实例**（单一数据源，避免双源不一致）
     @State private var store = AccountStore(secrets: EncryptedStore())
 
+    /// 应用偏好（隐藏 Dock 图标等），主窗口与状态栏共用
+    @State private var settings = AppSettings()
+
     var body: some Scene {
         WindowGroup(id: Self.mainWindowID) {
-            RootView(store: store)
+            RootView(store: store, settings: settings)
         }
         // D2：隐藏系统标题栏，保留交通灯，标题栏区域由 WindowTitlebar 自绘（PRD G-03）
         //
@@ -30,7 +33,7 @@ struct TwoWayApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultSize(
-            width: Token.Metrics.windowWidth,
+            width: WindowMetrics.width,
             height: Token.Metrics.windowHeight
         )
 
@@ -39,19 +42,24 @@ struct TwoWayApp: App {
         // `.menuBarExtraStyle(.window)` = 点图标弹出一个可承载输入控件的面板
         // （`.menu` 那种原生菜单无法放搜索框，故必须用 window 形态）。
         MenuBarExtra {
-            MenuBarView(store: store)
+            MenuBarView(store: store, settings: settings)
         } label: {
             Image("StatusBarIcon")
                 .accessibilityLabel("2way 验证码")
         }
         .menuBarExtraStyle(.window)
 
+        // 偏好设置（⌘, ；主窗口「⋯」菜单也有入口）
+        Settings {
+            SettingsView(settings: settings)
+        }
+
         #if DEBUG
         // 仅调试：把状态栏面板放到普通窗口里，便于截图/回归（菜单栏面板无法按窗口 ID 截取）。
         // ⚠️ `Window` scene 默认会随 App 启动一起打开 —— 由宿主视图在非调试启动时自动关掉，
         //    否则每次调试构建都会多出一个空窗。
         Window("状态栏面板预览", id: Self.menuBarPreviewWindowID) {
-            MenuBarPreviewHost(store: store)
+            MenuBarPreviewHost(store: store, settings: settings)
         }
         .defaultSize(width: 300, height: 400)
         #endif
@@ -62,10 +70,11 @@ struct TwoWayApp: App {
 /// 状态栏面板预览窗宿主（仅 `--debug-menubar` 启动时保留该窗）
 private struct MenuBarPreviewHost: View {
     let store: AccountStore
+    let settings: AppSettings
     @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
-        MenuBarView(store: store)
+        MenuBarView(store: store, settings: settings)
             .task {
                 guard !ProcessInfo.processInfo.arguments.contains("--debug-menubar") else { return }
                 dismissWindow(id: TwoWayApp.menuBarPreviewWindowID)

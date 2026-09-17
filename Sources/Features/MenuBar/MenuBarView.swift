@@ -14,6 +14,8 @@ import SwiftUI
 struct MenuBarView: View {
 
     let store: AccountStore
+    /// 应用偏好（引导时应用「隐藏 Dock 图标」等设置）
+    let settings: AppSettings
 
     @State private var query = Self.debugInitialQuery
     @State private var feedback: Feedback?
@@ -57,7 +59,7 @@ struct MenuBarView: View {
         .frame(width: 300)
         .background(Token.Palette.winBg)
         .onAppear {
-            try? AppBootstrap.start(store: store)
+            try? AppBootstrap.start(store: store, settings: settings)
             searchFocused = true
         }
     }
