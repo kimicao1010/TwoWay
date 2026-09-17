@@ -36,19 +36,28 @@ struct WindowConfigurator: NSViewRepresentable {
     }
 
     private func configure(_ window: NSWindow) {
+        #if DEBUG
+        RowTrace.log("configure window=\(ObjectIdentifier(window)) title='\(window.title)'")
+        #endif
         // 隐藏标题栏底色，让自绘标题栏直接顶到窗口上沿（PRD G-03）
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.titleVisibility = .hidden   // 不显示系统标题文字（我们自绘）
 
         // D10：完全去掉系统窗口按钮（关闭 / 最小化 / 缩放），窗口无系统 chrome。
-        // 关闭改由「⋯」菜单的「退出 2way」与 Cmd+W / Cmd+Q 提供；
+        // 关闭由「⋯」菜单的「关闭窗口」、「⌘W」与「退出 2way」提供；
         // 拖动由自绘标题栏的原生拖拽区提供（见 WindowTitlebar 的 WindowDragArea）。
+        //
+        // ⚠️ 三个按钮一律「隐藏 + 不可见」即可 —— **不要试图靠关闭按钮实现 ⌘W**：
+        //    实测（2026-09-17 探针）AppKit 会把**不可见的标准按钮同时置为 disabled**
+        //    （`isHidden` 与 `alphaValue = 0` 两种做法都会，显式 `isEnabled = true` 也压不住），
+        //    而系统 ⌘W 的 action 是 `performClose:` = 「模拟点击关闭按钮」→ 必然空操作。
+        //    ⌘W 改由 `CloseWindowMenu` 接管菜单项（走 `close()`，不查按钮状态）。
         for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             if let button = window.standardWindowButton(type) {
                 button.isHidden = true
                 button.alphaValue = 0      // 双保险：部分系统路径会重置 isHidden
-                button.isEnabled = false
+                button.isEnabled = type == .closeButton   // 关闭键保留语义，见 CloseWindowMenu
             }
         }
 

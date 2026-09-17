@@ -109,6 +109,7 @@
 | 行展开状态 | `openedRowID: Account.ID?`（单值） | R9「同时最多一行展开」由类型天然保证，无需手动收敛 |
 | 密钥形态 | 全程 `Data`，不出 `KeychainStore` | 降低进入崩溃报告/日志的概率 |
 | 切屏过渡 | **列表用 `.transition(.identity)`，子页才用 `.opacity`** | `.opacity` 过渡会把透明度**逐个施加到子树里的视图**：行底 alpha<1 时，左滑 ZStack 底层那张操作块（编辑｜删除）会透出来 → 「从子页回到主页时所有行闪现两个按钮」。取证：`--row-trace`（偏移恒 0，排除状态问题）+ `--slow-transition 3 --list-transition-opacity` A/B 连拍（旧行为 34/122 帧命中透出、最大 36671 偏红像素；改 `.identity` 后 0/123 帧） |
+| 关闭窗口 | **⌘W 由 `CloseWindowMenu` 接管为 `close()`，不要依赖关闭按钮** | D10 把交通灯做成不可见后，AppKit 会**顺带把标准按钮置为 disabled**（`isHidden` 与 `alphaValue=0` 都如此，显式 enable 无效）；而系统 ⌘W 走 `performClose(_:)` = 「模拟点击关闭按钮」→ 空操作。凡「隐藏系统窗口按钮」的窗口，都要自行接管关闭菜单项（或改用 `close()`） |
 | 滚动容器 | **一律 `.scrollIndicators(.never)`** | 铁律（源自《滚动条去除方法论》）：`.never` = 根本不创建 scroller（`has=0`/`scroller=nil`/占位 0）；`.hidden` = 只藏起来，**仍创建并占位 17px**，会让内容左右微移；两者叠加还会自相抵消。禁止 `showsIndicators:`（软废弃）。**踩坑成本**：本项目列表页正是这个写法，导致滚动条常驻 + 内容右移 17px |
 
 ---

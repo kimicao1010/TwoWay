@@ -138,6 +138,13 @@ struct RootView: View {
             #endif
         }
         .onAppear {
+            // ⌘W：把系统 File ▸ Close 接管成 close()（D10 隐藏关闭按钮后 performClose 必然是空操作）
+            CloseWindowMenu.install()
+            // SwiftUI 可能稍后才建好/重建主菜单，再补一次（幂等）
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                CloseWindowMenu.install()
+            }
             // 幂等引导：全局时钟 + 首次读盘（状态栏下拉也会触发，故必须幂等）
             do {
                 try AppBootstrap.start(store: store, settings: settings)
@@ -179,6 +186,44 @@ struct RootView: View {
             // --debug-toast：验证 toast 渲染（复制反馈等）
             if ProcessInfo.processInfo.arguments.contains("--debug-toast") {
                 toast.show("已复制")
+            }
+            // --debug-close-window：延时走一次 performClose（⌘W 的底层链路，无法程序化发按键）
+            if ProcessInfo.processInfo.arguments.contains("--debug-close-window") {
+                Task { @MainActor in
+                    // 先激活：未激活窗口的标准按钮会被 AppKit 灰掉（isEnabled 读回来是 false），
+                    // 不激活就量不出真实状态
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    NSApplication.shared.activate()
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    let managers = NSApplication.shared
+                    // 优先取「有标题且可见」的主窗口（app 未激活时 mainWindow 可能为 nil）
+                    let target = managers.mainWindow
+                        ?? managers.windows.first { $0.isVisible && $0.title == "2way" }
+                        ?? managers.windows.first { $0.isVisible }
+                    if let target {
+                        // 走**真实菜单项**的动作 —— 与按下 ⌘W 完全同一条链路
+                        let item = CloseWindowMenu.currentCloseItem()
+                        let button = target.standardWindowButton(.closeButton)
+                        RowTrace.log(
+                            "close-probe before: window=\(ObjectIdentifier(target)) "
+                            + "closeBtnHidden=\(button?.isHidden.description ?? "n/a") "
+                            + "closeBtnEnabled=\(button?.isEnabled.description ?? "n/a") "
+                            + "menuItemTitle='\(item?.title ?? "nil")' "
+                            + "patched=\(item?.action == #selector(CloseWindowMenu.closeKeyWindow(_:))) "
+                            + "isVisible=\(target.isVisible)"
+                        )
+                        if let item, let action = item.action {
+                            NSApplication.shared.sendAction(action, to: item.target, from: item)
+                        }
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        RowTrace.log(
+                            "close-probe after: isVisible=\(target.isVisible) "
+                            + "visibleWindows=\(managers.windows.filter(\.isVisible).count)"
+                        )
+                    } else {
+                        RowTrace.log("close-probe: no target window")
+                    }
+                }
             }
             // --debug-menubar：打开状态栏面板的预览窗口（面板本体在系统菜单栏，截图工具无法定位）
             if ProcessInfo.processInfo.arguments.contains("--debug-menubar") {
@@ -265,6 +310,11 @@ struct RootView: View {
                     Button("导出 GA 迁移码（PNG）…") {
                         backupSheetError = nil
                         router.backupSheet = .exportGAMigration
+                    }
+                    Divider()
+                    // D10：系统交通灯已移除，这里补图形化入口（⌘W 同样有效，链路见 CloseWindowMenu）
+                    Button("关闭窗口") {
+                        CloseWindowMenu.shared.closeKeyWindow(nil)
                     }
                     Divider()
                     // D10：系统「关闭」按钮已移除，这里是图形化的退出入口（另有 Cmd+W / Cmd+Q）
