@@ -103,6 +103,14 @@ struct AccountListView: View {
     }
 }
 
+/// 列表的命名坐标系：拖动/左滑的位移在**这里**测量，而非行自身（DR-01 抖动修复）
+///
+/// 挂在滚动容器上（而非内容上）：即使内容因滚动而位移，坐标系仍然稳定；
+/// 而行的拖动位移（祖先 offset）不会影响它 —— 这正是消除反馈回路的关键。
+enum AccountListCoordinateSpace {
+    static let name = "accountList"
+}
+
 /// 行列表（滚动条隐藏，PRD FR-01 AC）
 private struct AccountRows: View {
     var store: AccountStore
@@ -189,6 +197,8 @@ private struct AccountRows: View {
         // 勿改回 `.hidden`：它只把滚动条藏起来，占位与创建照旧（实测挤压裁剪区 17px，
         // 会使内容左右微移）。取证：`--scroll-probe <path>`（DEBUG 自报 NSScrollView 几何）。
         .scrollIndicators(.never)
+        // 拖动/左滑的位移测量坐标系（DR-01：见 AccountListCoordinateSpace 说明）
+        .coordinateSpace(name: AccountListCoordinateSpace.name)
     }
 
     /// 插入位指示线（只在真正会改变顺序时出现）
@@ -250,7 +260,7 @@ private struct AccountRows: View {
 
         Task { @MainActor in
             let intervalMs = 8.0
-            let totalMs = 1600.0
+            let totalMs = 3000.0
             var elapsed = 0.0
             var lastLanding = reorder.landingIndex
             var transitions: [String] = []
@@ -260,7 +270,7 @@ private struct AccountRows: View {
 
             while elapsed < totalMs {
                 let start = Date()
-                let base = elapsed * 0.13                       // 1.6s → ≈208pt ≈ 2.6 格
+                let base = elapsed * 0.07                       // 3s → ≈210pt ≈ 2.7 格
                 let jitter = sin(elapsed / 6) * 3               // ±3pt 边界抖动
                 reorder.update(translationY: CGFloat(base + jitter))
 
@@ -478,13 +488,32 @@ private struct SwipeableAccountRow: View {
     /// macOS 上鼠标拖动**不会滚动** NSScrollView（滚动靠滚轮/触控板），
     /// 所以这里与列表滚动天然不冲突，无需长按等额外门槛。
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: Token.Metrics.swipeDragThreshold)
+        // ⚠️ 必须用**稳定的命名坐标系**，不能用默认的 `.local`：
+        // 拖动排序时整行被 offset（祖先视图的几何变换），行的 local 坐标系会随之移动，
+        // 于是「位移 = 光标位置 − 起点」里的光标位置被行自身位移抵消 → 行弹回原位 → 再跟手，
+        // 形成每帧一次的锯齿抖动（实测 dy: -26, -2, -28, -4, -28…，locY 在两个值间跳）。
+        // 挂到列表容器的命名坐标系后，测量不再受行自身位移影响（左滑同样受益）。
+        DragGesture(
+            minimumDistance: Token.Metrics.swipeDragThreshold,
+            coordinateSpace: .named(AccountListCoordinateSpace.name)
+        )
             .onChanged { value in
                 let dx = value.translation.width
                 let dy = value.translation.height
 
                 // 已在排序会话中：只更新位移
                 if isReordering {
+                    #if DEBUG
+                    // 取证（`--debug-drag-trace`）：真实手势下 dy 是否单调。同时上报 start/location ——
+                    // 若 startLocation 恒定而 location 在两个值之间跳，说明测量坐标系自身在动
+                    // （自指反馈回路，v1.13 的抖动根因）。默认关闭：每事件写盘会干扰手感。
+                    if DebugFlags.tracesDragEvents {
+                        RowTrace.log(
+                            "drag \(account.displayName) dy=\(Int(dy)) "
+                            + "startY=\(Int(value.startLocation.y)) locY=\(Int(value.location.y))"
+                        )
+                    }
+                    #endif
                     onReorderChange(dy)
                     return
                 }

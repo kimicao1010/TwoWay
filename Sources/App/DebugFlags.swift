@@ -42,6 +42,14 @@ enum DebugFlags {
         arguments.contains("--debug-drag-script")
     }
 
+    /// `--debug-drag-trace`：逐个鼠标事件记录拖动位移（含 start/location）
+    ///
+    /// 定位「拖动抖动」类问题时开启：若 `start` 恒定而 `location` 在两个值间跳，
+    /// 说明测量坐标系自身在动（自指反馈回路）。默认关闭 —— 每事件写盘会干扰手感。
+    static var tracesDragEvents: Bool {
+        arguments.contains("--debug-drag-trace")
+    }
+
     /// 演示账户：名称/发行方/密钥全部为虚构或公开测试向量
     static let demoAccounts: [(displayName: String, issuer: String?, secretBase32: String)] = [
         ("you@example.com", "GitHub", "JBSWY3DPEHPK3PXP"),
