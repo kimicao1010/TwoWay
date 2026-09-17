@@ -19,6 +19,9 @@ struct TwoWayApp: App {
     /// 应用偏好（隐藏 Dock 图标等），主窗口与状态栏共用
     @State private var settings = AppSettings()
 
+    /// 退出二次确认（R13）：所有退出路径都汇到 `applicationShouldTerminate`
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     /// 钱包目录：生产为默认目录；DEBUG 下 `--wallet-dir` 可指向隔离目录（截图用虚构数据）
     private static var walletDirectory: URL? {
         #if DEBUG
