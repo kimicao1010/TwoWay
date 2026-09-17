@@ -158,8 +158,6 @@ enum Token {
         static let secondaryButtonHeight: CGFloat = 40
         static let previewCardHeight: CGFloat = 76
 
-        /// 导入图片页拖放区**高度**（v1.10：宽度改为自适应 —— 窗口收窄到 360 后
-        /// 内容区只有 320pt，固定 360 宽会溢出窗口）
         /// DR-01 拖动排序的激活阈值（竖直位移）
         ///
         /// 刻意比左滑的 8pt 更迟钝：排序会**改数据**，误触代价高；
@@ -198,6 +196,8 @@ enum Token {
         static let screenTransition: Double = 0.26
         /// Toast 停留时长
         static let toastDuration: Double = 1.8
+        /// R13：⌘Q 防误触提示的停留时长（这段时间内再按一次 ⌘Q 即退出）
+        static let quitHintDuration: TimeInterval = 2.5
     }
 
     // MARK: - 字体（PRD §8.2，D4 决策：等价替代）

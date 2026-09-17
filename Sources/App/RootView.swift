@@ -116,6 +116,14 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: toast.current)
+        // R13：⌘Q 防误触提示（窗体内浮层；第二次 ⌘Q 即退出）
+        .overlay(alignment: .center) {
+            if QuitGuard.shared.isAwaitingSecondPress {
+                QuitHintView()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: QuitGuard.shared.isAwaitingSecondPress)
         .sheet(isPresented: isBackupSheetPresented) {
             backupSheetContent
         }
@@ -327,7 +335,8 @@ struct RootView: View {
                     Divider()
                     // D10：系统「关闭」按钮已移除，这里是图形化的退出入口（另有 Cmd+W / Cmd+Q）
                     Button("退出 2way") {
-                        NSApplication.shared.terminate(nil)
+                        // R13：菜单里的显式点击 → 直接退出（只有键盘 ⌘Q 走防误触）
+                        QuitGuard.shared.quitImmediately()
                     }
                 } label: {
                     Image(systemName: "ellipsis")

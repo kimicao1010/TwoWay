@@ -30,8 +30,16 @@ enum AppShortcutMonitor {
                 MainActor.assumeIsolated { CloseWindowMenu.shared.closeKeyWindow(nil) }
                 return nil
             case "q":
-                // 走标准退出流程：应用委托里的二次确认（R13）依然生效
-                MainActor.assumeIsolated { NSApplication.shared.terminate(nil) }
+                // 不直接退出：交给 QuitGuard 决定（激活态先给窗体内提示，再按一次才退出）
+                MainActor.assumeIsolated {
+                    #if DEBUG
+                    RowTrace.log(
+                        "cmdQ received windowActive=\(MainWindowRegistry.window?.isKeyWindow ?? false) "
+                        + "awaiting=\(QuitGuard.shared.isAwaitingSecondPress)"
+                    )
+                    #endif
+                    QuitGuard.shared.handleCommandQ()
+                }
                 return nil
             default:
                 return event

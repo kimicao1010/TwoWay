@@ -166,7 +166,8 @@ struct MenuBarView: View {
                 .monospacedDigit()
 
             Button {
-                NSApplication.shared.terminate(nil)
+                // R13：状态栏面板里的「退出」是显式点击 → 直接退出，不做防误触确认
+                QuitGuard.shared.quitImmediately()
             } label: {
                 Text("退出")
                     .font(.system(size: 12))
