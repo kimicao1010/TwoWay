@@ -140,6 +140,7 @@ private struct AccountRows: View {
                         isOpen: store.openedRowID == account.id,
                         isReordering: isDragging,
                         allowsReorder: allowsReorder,
+                        reorderModel: reorder,
                         onTapCopy: { onCopy(account) },
                         onEdit: { onEdit(account) },
                         onDelete: { onDelete(account) },
@@ -148,10 +149,12 @@ private struct AccountRows: View {
                         onReorderChange: { translationY in reorder.update(translationY: translationY) },
                         onReorderEnd: endReorder
                     )
-                    // 拖动行跟随光标；其余行按插入位让位
-                    .offset(y: (isDragging ? reorder.offsetY : 0) + reorder.shift(forRowAt: index))
-                    .zIndex(isDragging ? 1 : 0)
+                    // 让位：只在跨格时变化 → 带动画。
+                    // ⚠️ 拖动行**跟随光标**的位移不在这里（在行内部，且绝不能带动画）：
+                    // 二者若共用一个 offset + 同一个 .animation，跨格时会重新平滑拖动行自身 → 抖动。
+                    .offset(y: reorder.shift(forRowAt: index))
                     .animation(.easeOut(duration: 0.18), value: reorder.insertionIndex)
+                    .zIndex(isDragging ? 1 : 0)
                 }
             }
             .padding(.horizontal, Token.Metrics.listPaddingH)
@@ -161,12 +164,23 @@ private struct AccountRows: View {
                 #if DEBUG
                 // --debug-reorder-drag：注入「第 1 行被往下拖两行」的状态，便于截图核对视觉
                 if DebugFlags.simulatesReorderDrag, !reorder.isActive, rows.count > 2 {
-                    reorder.begin(id: rows[0].id, originIndex: 0, step: step, count: rows.count)
+                    reorder.begin(
+                        id: rows[0].id,
+                        originIndex: 0,
+                        step: step,
+                        count: rows.count,
+                        hysteresis: Token.Metrics.reorderHysteresis
+                    )
                     reorder.update(translationY: step * 2 + 6)
                     RowTrace.log(
                         "debug-reorder injected dragged=\(rows[0].displayName) step=\(step) "
                         + "order=[\(rows.map(\.displayName).joined(separator: ","))]"
                     )
+                }
+                // --debug-drag-script：脚本化拖动一段距离（带 ±3px 抖动，专踩格子边界），
+                // 自报落点变化序列与主线程 tick 偏差 —— 用于验证「无抖动」是可复现的事实
+                if DebugFlags.runsReorderDragScript, !reorder.isActive, rows.count > 2 {
+                    runDragScript()
                 }
                 #endif
             }
@@ -204,7 +218,13 @@ private struct AccountRows: View {
 
     private func beginReorder(_ account: Account, at index: Int) {
         store.setOpenedRow(nil)   // 先收起左滑，避免「左滑位移 + 拖动位移」叠加
-        reorder.begin(id: account.id, originIndex: index, step: step, count: rows.count)
+        reorder.begin(
+            id: account.id,
+            originIndex: index,
+            step: step,
+            count: rows.count,
+            hysteresis: Token.Metrics.reorderHysteresis
+        )
         #if DEBUG
         RowTrace.log(
             "reorder begin id=\(account.displayName) origin=\(index) count=\(rows.count) "
@@ -212,6 +232,72 @@ private struct AccountRows: View {
         )
         #endif
     }
+
+    #if DEBUG
+    /// 脚本化拖动（`--debug-drag-script`）：1.6 秒内平滑下拖约 2.5 格，
+    /// 并叠加 ±3pt 抖动（振幅略小于滞回余量），专门踩在跨格边界上。
+    ///
+    /// 期望：落点单调推进（不来回翻转），tick 偏差小 → 证明「边界抖动」已被滞回消除。
+    private func runDragScript() {
+        reorder.begin(
+            id: rows[0].id,
+            originIndex: 0,
+            step: step,
+            count: rows.count,
+            hysteresis: Token.Metrics.reorderHysteresis
+        )
+        RowTrace.log("drag-script begin rows=\(rows.count) step=\(step)")
+
+        Task { @MainActor in
+            let intervalMs = 8.0
+            let totalMs = 1600.0
+            var elapsed = 0.0
+            var lastLanding = reorder.landingIndex
+            var transitions: [String] = []
+            var maxTickMs = 0.0
+            var maxTickAt = 0.0
+            var lateMaxTickMs = 0.0          // 后半段（跳过启动期抖动）的最差 tick
+
+            while elapsed < totalMs {
+                let start = Date()
+                let base = elapsed * 0.13                       // 1.6s → ≈208pt ≈ 2.6 格
+                let jitter = sin(elapsed / 6) * 3               // ±3pt 边界抖动
+                reorder.update(translationY: CGFloat(base + jitter))
+
+                if reorder.landingIndex != lastLanding {
+                    let from = lastLanding.map(String.init) ?? "-"
+                    let to = reorder.landingIndex.map(String.init) ?? "-"
+                    transitions.append("\(from)>\(to)")
+                    lastLanding = reorder.landingIndex
+                }
+
+                try? await Task.sleep(nanoseconds: UInt64(intervalMs * 1_000_000))
+                let tick = Date().timeIntervalSince(start) * 1000
+                if tick > maxTickMs {
+                    maxTickMs = tick
+                    maxTickAt = elapsed
+                }
+                if elapsed > totalMs / 2 {
+                    lateMaxTickMs = max(lateMaxTickMs, tick)
+                }
+                elapsed += intervalMs
+            }
+
+            // 来回翻转会让 transitions 里出现 A>B>A 模式；单调推进则只应看到单向前进
+            let flips = zip(transitions, transitions.dropFirst()).filter { lhs, rhs in
+                lhs.hasPrefix(String(rhs.suffix(1))) && lhs.hasSuffix(String(rhs.prefix(1)))
+            }.count
+
+            RowTrace.log(
+                "drag-script done transitions=[\(transitions.joined(separator: ","))] "
+                + "backFlips=\(flips) maxTickMs=\(String(format: "%.1f", maxTickMs))@\(String(format: "%.0f", maxTickAt))ms "
+                + "lateMaxTickMs=\(String(format: "%.1f", lateMaxTickMs)) "
+                + "finalLanding=\(reorder.landingIndex.map(String.init) ?? "nil")"
+            )
+            reorder.end()
+        }
+    }
+    #endif
 
     /// 落定：把拖动行放到插入位对应的目标行之前/之后
     private func endReorder() {
@@ -267,6 +353,8 @@ private struct SwipeableAccountRow: View {
     let isReordering: Bool
     /// DR-01：当前是否允许拖动排序（搜索过滤中禁用）
     let allowsReorder: Bool
+    /// DR-01：拖动会话（**只有被拖动的那一行**会读它的 `offsetY`，避免整表每帧重算）
+    let reorderModel: ListReorderModel
     /// 点按复制，返回是否成功（成功 → 行闪烁 R1）
     var onTapCopy: () -> Bool
     var onEdit: () -> Void
@@ -298,6 +386,11 @@ private struct SwipeableAccountRow: View {
             actionBlock
             rowContent
         }
+        // DR-01：跟手位移。**绝不加任何动画**（`.animation` 会在每次落点变化时
+        // 重新平滑这一行的位置，光标却仍在移动 → 表现为拖动行剧烈抖动）。
+        // 同时该读取只在本行被拖动时发生 → Observation 依赖范围限定在这一行，
+        // 列表其余行不会随鼠标每移动一像素就重算 body。
+        .offset(y: isReordering ? reorderModel.offsetY : 0)
         // DR-01：拖动中的行「抬起」——轻微放大 + 投影，明确区分于原位行
         .scaleEffect(isReordering ? 1.02 : 1)
         .shadow(

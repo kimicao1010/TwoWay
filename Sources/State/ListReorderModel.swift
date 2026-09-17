@@ -4,7 +4,7 @@ import Observation
 
 /// 列表拖动排序的**会话状态**（DR-01 / R12）
 ///
-/// 只承载「正在拖哪一行、拖到哪了、将插入到哪个缝隙」，
+/// 只承载「正在拖哪一行、拖到哪了、将落到哪个槽位」，
 /// 具体重排与落盘由 `AccountStore.move` 负责（数据层与手势层解耦，便于单测）。
 @MainActor
 @Observable
@@ -12,37 +12,53 @@ final class ListReorderModel {
 
     /// 正在拖动的账户（nil = 未在排序）
     private(set) var draggingID: UUID?
-    /// 被拖动行**原位**的下标（用于算让位与插入位）
+    /// 被拖动行**原位**的下标（用于算让位与落点）
     private(set) var originIndex = 0
-    /// 相对原位的竖直位移（跟随光标）
+    /// 相对原位的竖直位移（跟随光标）—— 只有被拖动的那一行会读它
     private(set) var offsetY: CGFloat = 0
-    /// 当前插入位（缝隙下标，0...行数）
-    private(set) var insertionIndex: Int?
+    /// 落点槽位（0..<count）；nil = 未在拖动
+    private(set) var landingIndex: Int?
 
     private var step: CGFloat = 0
-    private var count = 0
+    private var slotCount = 0
+    private var hysteresis: CGFloat = 0
 
     var isActive: Bool { draggingID != nil }
 
+    /// 供 `ReorderLogic.moved` 使用的插入位（语义：移除拖动行**之前**数组的缝隙下标）
+    var insertionIndex: Int? {
+        guard let landing = landingIndex else { return nil }
+        return landing > originIndex ? landing + 1 : landing
+    }
+
     /// 开始拖动
-    func begin(id: UUID, originIndex: Int, step: CGFloat, count: Int) {
+    func begin(
+        id: UUID,
+        originIndex: Int,
+        step: CGFloat,
+        count: Int,
+        hysteresis: CGFloat = 4
+    ) {
         self.draggingID = id
         self.originIndex = originIndex
         self.offsetY = 0
-        self.insertionIndex = originIndex
+        self.landingIndex = originIndex
         self.step = step
-        self.count = count
+        self.slotCount = count
+        self.hysteresis = hysteresis
     }
 
-    /// 拖动中：更新位移并重算插入位
+    /// 拖动中：更新位移并重算落点（带滞回，避免边界抖动）
     func update(translationY: CGFloat) {
         guard isActive else { return }
         offsetY = translationY
-        insertionIndex = ReorderLogic.insertionIndex(
+        landingIndex = ReorderLogic.landingIndex(
             from: originIndex,
             dy: translationY,
             step: step,
-            count: count
+            count: slotCount,
+            current: landingIndex ?? originIndex,
+            hysteresis: hysteresis
         )
     }
 
@@ -50,7 +66,7 @@ final class ListReorderModel {
     func end() {
         draggingID = nil
         offsetY = 0
-        insertionIndex = nil
+        landingIndex = nil
         originIndex = 0
     }
 
@@ -66,12 +82,6 @@ final class ListReorderModel {
             return step           // 上面的行被拖下来 → 这些行整体下移
         }
         return 0
-    }
-
-    /// 落定后该行占据的下标（画插入位指示线用：线画在落点槽位的上沿）
-    var landingIndex: Int? {
-        guard isActive, let insertion = insertionIndex else { return nil }
-        return insertion > originIndex ? insertion - 1 : insertion
     }
 
     /// 是否发生了实际位移（原位放下则不算）

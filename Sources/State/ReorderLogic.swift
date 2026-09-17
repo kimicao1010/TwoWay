@@ -34,6 +34,32 @@ enum ReorderLogic {
         return min(count - 1, max(0, from + crossedSlots))
     }
 
+    /// 带**滞回**的落点判定：光标停在格子边界附近时不会来回翻转（消除拖动抖动）
+    ///
+    /// - Parameters:
+    ///   - current: 当前落点（槽位）
+    ///   - hysteresis: 死区余量；越过「当前槽位中心 ± (半格 + 该值)」才承认新落点
+    static func landingIndex(
+        from: Int,
+        dy: CGFloat,
+        step: CGFloat,
+        count: Int,
+        current: Int,
+        hysteresis: CGFloat
+    ) -> Int {
+        let candidate = landingIndex(from: from, dy: dy, step: step, count: count)
+        guard candidate != current, step > 0 else { return current }
+        guard (0 ..< count).contains(current) else { return candidate }   // 行数变化导致旧落点失效
+
+        let center = CGFloat(current - from) * step
+        let threshold = step / 2 + hysteresis
+        if candidate > current {
+            return dy > center + threshold ? candidate : current
+        } else {
+            return dy < center - threshold ? candidate : current
+        }
+    }
+
     /// 由拖动位移换算「插入位」（0...count 的缝隙下标，供 `moved` 使用）
     ///
     /// 语义：缝隙下标以**移除拖动行之前**的数组为准。

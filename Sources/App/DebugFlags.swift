@@ -35,6 +35,13 @@ enum DebugFlags {
         arguments.contains("--debug-reorder-drag")
     }
 
+    /// `--debug-drag-script`：脚本化拖动一段距离（带边界抖动），自报落点序列与 tick 偏差
+    ///
+    /// 用于自动化验证「拖动不抖」：落点应单调推进、无来回翻转。
+    static var runsReorderDragScript: Bool {
+        arguments.contains("--debug-drag-script")
+    }
+
     /// 演示账户：名称/发行方/密钥全部为虚构或公开测试向量
     static let demoAccounts: [(displayName: String, issuer: String?, secretBase32: String)] = [
         ("you@example.com", "GitHub", "JBSWY3DPEHPK3PXP"),

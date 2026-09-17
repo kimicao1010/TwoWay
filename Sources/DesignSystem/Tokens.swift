@@ -167,6 +167,12 @@ enum Token {
         static let reorderActivation: CGFloat = 24
         /// DR-01 插入位指示线高度
         static let reorderIndicatorHeight: CGFloat = 2
+        /// DR-01 落点判定的滞回余量（pt）
+        ///
+        /// 跨格判定本是「越过半格即跨过」，光标停在半格线附近时 ±1px 抖动就会让落点来回翻转，
+        /// 而每次翻转都会重新触发让位动画 → 视觉上就是「剧烈抖动」。
+        /// 加上 ±该值 的死区后，必须明确越过边界才改变落点。
+        static let reorderHysteresis: CGFloat = 4
 
         static let scannerHeight: CGFloat = 340
         static let scannerRadius: CGFloat = 14

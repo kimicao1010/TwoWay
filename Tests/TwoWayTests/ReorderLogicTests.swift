@@ -69,6 +69,55 @@ struct ReorderLogicTests {
         #expect(ReorderLogic.moved(["A", "B", "C"], from: 2, to: 1) == ["A", "C", "B"])
     }
 
+    // MARK: 滞回（拖动不抖动的关键）
+
+    @Test("光标停在跨格边界附近来回 1px → 落点不翻转（否则让位动画会反复重触发＝抖动）")
+    func hysteresisPreventsFlipFlop() {
+        let step: CGFloat = 78
+        let boundary = step / 2          // 0 → 1 的边界
+        var landing = 0
+
+        // 在边界两侧 ±3pt 反复抖动（幅度小于滞回余量 4）
+        for dy in [39, 41, 39, 42, 38, 41, 39] {
+            let candidate = ReorderLogic.landingIndex(from: 0, dy: CGFloat(dy), step: step, count: 5)
+            landing = ReorderLogic.landingIndex(
+                from: 0,
+                dy: CGFloat(dy),
+                step: step,
+                count: 5,
+                current: landing,
+                hysteresis: 4
+            )
+            #expect(candidate == 1 || candidate == 0)
+        }
+        #expect(landing == 0)   // 一直停在原位，未因抖动而跨格
+
+        // 明确越过（半格 + 滞回）才承认
+        landing = ReorderLogic.landingIndex(
+            from: 0, dy: boundary + 5, step: step, count: 5, current: landing, hysteresis: 4
+        )
+        #expect(landing == 1)
+    }
+
+    @Test("带滞回：跨多格仍按位移推进；回退需明确越过边界")
+    func hysteresisStillMoves() {
+        let step: CGFloat = 78
+        let threshold = step / 2 + 4      // 43
+        var landing = 0
+
+        // 大幅位移照常推进（滞回不影响明确意图）
+        landing = ReorderLogic.landingIndex(from: 0, dy: 200, step: step, count: 6, current: landing, hysteresis: 4)
+        #expect(landing == 3)             // 200 / 78 = 2.56 → 3
+
+        // 落点 3 的中心 = 234；退到 234 - 43 = 191 之内时不改变
+        landing = ReorderLogic.landingIndex(from: 0, dy: 194, step: step, count: 6, current: landing, hysteresis: 4)
+        #expect(landing == 3)             // 仍在死区内
+
+        landing = ReorderLogic.landingIndex(from: 0, dy: 190, step: step, count: 6, current: landing, hysteresis: 4)
+        #expect(landing == 2)             // 明确退出 → 回落到 2
+        #expect(threshold == 43)
+    }
+
     @Test("退化输入不崩：步长 0 / 空列表 / 非法下标")
     func degenerateInputs() {
         #expect(ReorderLogic.landingIndex(from: 0, dy: 100, step: 0, count: 5) == 0)

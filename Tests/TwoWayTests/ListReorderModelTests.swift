@@ -63,15 +63,37 @@ struct ListReorderModelTests {
         #expect(model.shift(forRowAt: 2) == 0)
     }
 
-    @Test("越过半格即产生落点与让位（消除首格死区）")
+    @Test("越过半格 + 滞回余量即跨格（既有推进，又不抖）")
     func halfStepCrosses() {
-        let model = makeModel()
-        model.update(translationY: step / 2)
+        let model = makeModel()          // 默认滞回 4
 
+        model.update(translationY: step / 2)          // 半格 —— 停在死区内
+        #expect(model.landingIndex == 0)
+        #expect(model.hasPendingMove == false)
+
+        model.update(translationY: step / 2 + 5)      // 明确越过
         #expect(model.landingIndex == 1)
         #expect(model.hasPendingMove)
         #expect(model.shift(forRowAt: 1) == -step)
         #expect(model.shift(forRowAt: 2) == 0)
+    }
+
+    @Test("边界抖动不改变落点（拖动不抖的关键：让位动画不会被反复重触发）")
+    func boundaryJitterDoesNotFlip() {
+        let model = makeModel()
+        let boundary = step / 2
+
+        // 在 0→1 边界两侧来回抖动（幅度小于滞回余量）
+        for dy in [boundary - 3, boundary + 3, boundary - 4, boundary + 2, boundary] {
+            model.update(translationY: dy)
+            #expect(model.landingIndex == 0)
+        }
+
+        // 明确越过才推进，且推进后小幅回退不会立刻退回
+        model.update(translationY: boundary + 6)
+        #expect(model.landingIndex == 1)
+        model.update(translationY: boundary + 2)
+        #expect(model.landingIndex == 1)
     }
 
     @Test("end() 清空会话，后续不再参与渲染")
