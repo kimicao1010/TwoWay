@@ -42,6 +42,19 @@ enum DebugFlags {
         arguments.contains("--debug-drag-script")
     }
 
+    /// `--debug-close-window`：启动后关闭主窗口**一次**
+    ///
+    /// 用于回归「状态栏 → 打开主窗口」的**关闭态**（窗口已关 → 点击应重开**一个**，不是无限新建）：
+    /// 合成 ⌘W / AXClose 都无法可靠地关闭自绘标题栏（系统按钮已隐藏）的窗口。
+    ///
+    /// ⚠️ 必须「只关一次」：窗口重新显示会再次触发 `onAppear`，若每次都关，会把重开路径测成死循环。
+    static var closesMainWindowAtLaunch: Bool {
+        arguments.contains("--debug-close-window")
+    }
+
+    /// 该调试钩子本次进程是否已执行过（仅 `--debug-close-window` 使用）
+    @MainActor static var didCloseMainWindowOnce = false
+
     /// `--debug-drag-trace`：逐个鼠标事件记录拖动位移（含 start/location）
     ///
     /// 定位「拖动抖动」类问题时开启：若 `start` 恒定而 `location` 在两个值间跳，

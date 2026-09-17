@@ -48,7 +48,7 @@
 **方式一：DMG**
 
 ```bash
-bash scripts/release-package.sh      # 产出 dist/2way-1.0.dmg
+bash scripts/release-package.sh      # 产出 dist/2way-1.0.1.dmg
 ```
 
 打开 DMG 把 `2way.app` 拖入「应用程序」。产物使用**自签名证书**签名（`scripts/create-signing-cert.sh` 创建），无法通过公证：
@@ -106,6 +106,9 @@ scripts/           # 打包、签名、图标同步、几何实测脚本
 | `--row-trace <log>` | 自报行偏移/展开态与切屏时序（瞬态取证） |
 | `--slow-transition <s>` + `--list-transition-opacity` | 放慢切屏 + A/B 复现过渡期合成问题 |
 | `--debug-flip-screens [--flip-interval <s>]` | 自驱列表 ↔ 添加页往返（复现切屏瞬态） |
+| `--debug-reorder-drag` / `--debug-drag-script` | 注入「拖动中」状态（截图用）/ 脚本化拖动（自报落点序列、回翻数、tick 偏差） |
+| `--debug-drag-trace` | 逐个鼠标事件自报拖动位移（含 `start`/`location`）—— 排查「拖动抖动」类问题 |
+| `--debug-close-window` | 启动后关闭主窗口一次（回归「状态栏 → 打开主窗口」的关闭态） |
 
 ## 文档
 

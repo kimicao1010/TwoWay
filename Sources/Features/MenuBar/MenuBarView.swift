@@ -202,9 +202,28 @@ struct MenuBarView: View {
         }
     }
 
+    /// DR-02：**复用**已有主窗口（不新建）
+    ///
+    /// 之前每次调用都 `openWindow(id:)`，而主窗口 scene 是 `WindowGroup` → 点一次多一个窗口。
     private func openMainWindow() {
-        openWindow(id: TwoWayApp.mainWindowID)
-        NSApplication.shared.activate()
+        let application = NSApplication.shared
+        let action = MainWindowPolicy.action(
+            hasExistingWindow: MainWindowRegistry.window != nil,
+            isMiniaturized: MainWindowRegistry.window?.isMiniaturized ?? false
+        )
+
+        switch action {
+        case .focusExisting(let deminiaturize):
+            if let window = MainWindowRegistry.window {
+                if deminiaturize { window.deminiaturize(nil) }
+                window.makeKeyAndOrderFront(nil)
+            }
+            application.unhide(nil)      // 应用被 ⌘H 隐藏时一并恢复
+            application.activate()
+        case .openNew:
+            openWindow(id: TwoWayApp.mainWindowID)
+            application.activate()
+        }
     }
 }
 

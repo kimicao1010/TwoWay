@@ -225,6 +225,14 @@ struct RootView: View {
                     }
                 }
             }
+            // --debug-close-window：启动后关掉主窗口**一次**（回归「关闭态 → 状态栏打开主窗口」）
+            if DebugFlags.closesMainWindowAtLaunch, !DebugFlags.didCloseMainWindowOnce {
+                DebugFlags.didCloseMainWindowOnce = true
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    CloseWindowMenu.shared.closeKeyWindow(nil)
+                }
+            }
             // --debug-menubar：打开状态栏面板的预览窗口（面板本体在系统菜单栏，截图工具无法定位）
             if ProcessInfo.processInfo.arguments.contains("--debug-menubar") {
                 openWindow(id: TwoWayApp.menuBarPreviewWindowID)

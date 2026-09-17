@@ -39,6 +39,8 @@ struct WindowConfigurator: NSViewRepresentable {
         #if DEBUG
         RowTrace.log("configure window=\(ObjectIdentifier(window)) title='\(window.title)'")
         #endif
+        // DR-02：登记主窗口，供状态栏「打开主窗口」前置（本 Configurator 仅用于主窗口）
+        MainWindowRegistry.register(window)
         // 隐藏标题栏底色，让自绘标题栏直接顶到窗口上沿（PRD G-03）
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none

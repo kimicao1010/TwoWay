@@ -29,7 +29,11 @@ struct TwoWayApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(id: Self.mainWindowID) {
+        // ⚠️ 必须是 `Window`（单实例），**不能**用 `WindowGroup`（DR-02，用户实测缺陷）：
+        //    `WindowGroup` 为多窗口/多文档设计，状态栏每次 `openWindow(id:)` 都会**新建**一个
+        //    主窗口（实测点 3 次得到 3 个 360×732 窗口，且级联偏移 29px）。
+        //    `Window` 只允许一个实例；配合 `MainWindowRegistry` 在点击时前置已有窗口。
+        Window("2way", id: Self.mainWindowID) {
             RootView(store: store, settings: settings)
         }
         // D2：隐藏系统标题栏，保留交通灯，标题栏区域由 WindowTitlebar 自绘（PRD G-03）
