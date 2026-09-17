@@ -13,19 +13,29 @@ struct Account: Identifiable, Hashable, Sendable, Codable {
     var parameters: OTPParameters
     /// 详情页「添加时间」（PRD §7.5 参数卡）
     var addedAt: Date
+    /// 列表显示次序（DR-01 拖动排序）
+    ///
+    /// - `nil` = **从未自定义过顺序** → 列表沿用「按添加时间倒序」（新账户在顶）
+    /// - 非 nil = 用户拖动排序过 → 按其**升序**排列（0 在最上）
+    ///
+    /// 之所以用「可选 + 全 nil 视为未排序」而不是「一律使用数组下标」：
+    /// 已存在的老钱包里没有任何顺序信息，若直接改按下标显示，用户升级后列表顺序会突变。
+    var sortIndex: Int?
 
     init(
         id: UUID = UUID(),
         displayName: String,
         issuer: String? = nil,
         parameters: OTPParameters = .standard,
-        addedAt: Date = Date()
+        addedAt: Date = Date(),
+        sortIndex: Int? = nil
     ) {
         self.id = id
         self.displayName = displayName
         self.issuer = issuer
         self.parameters = parameters
         self.addedAt = addedAt
+        self.sortIndex = sortIndex
     }
 }
 

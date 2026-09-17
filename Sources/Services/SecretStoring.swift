@@ -14,6 +14,19 @@ protocol SecretStoring {
     func readAllMetadata() throws -> [KeychainStore.MetadataEntry]
     func update(id: UUID, secret: Data, metadataJSON: Data) throws
     func delete(id: UUID) throws
+
+    /// 只改元数据、**不碰密钥**（DR-01 拖动排序用：顺序变化与密钥无关）
+    ///
+    /// 实现者应尽量原地替换元数据字段，避免把密钥读出来再写回（S1：密钥少一次进出内存）。
+    func updateMetadata(id: UUID, metadataJSON: Data) throws
+}
+
+extension SecretStoring {
+    /// 兜底实现：读一次密钥再整体写回（等价语义；EncryptedStore/InMemory 另有高效实现）
+    func updateMetadata(id: UUID, metadataJSON: Data) throws {
+        let entry = try read(id: id)
+        try update(id: id, secret: entry.secret, metadataJSON: metadataJSON)
+    }
 }
 
 extension KeychainStore: SecretStoring {}
@@ -53,5 +66,12 @@ final class InMemorySecretStore: SecretStoring {
     func delete(id: UUID) throws {
         lock.lock(); defer { lock.unlock() }
         records.removeValue(forKey: id)
+    }
+
+    /// 只替换元数据，保留原密钥（DR-01 拖动排序）
+    func updateMetadata(id: UUID, metadataJSON: Data) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard let record = records[id] else { throw KeychainStore.StoreError.itemNotFound }
+        records[id] = Record(secret: record.secret, metadataJSON: metadataJSON)
     }
 }

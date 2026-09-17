@@ -27,6 +27,14 @@ enum DebugFlags {
         arguments.contains("--debug-pulse")
     }
 
+    /// `--debug-reorder-drag`：把列表置于「正在拖动第 1 行」的状态
+    ///
+    /// 用于截图验证拖动中的视觉（抬起行 + 让位 + 插入位指示线）——
+    /// 真实鼠标拖拽无法程序化复现（缺辅助功能权限），故用状态注入代替。
+    static var simulatesReorderDrag: Bool {
+        arguments.contains("--debug-reorder-drag")
+    }
+
     /// 演示账户：名称/发行方/密钥全部为虚构或公开测试向量
     static let demoAccounts: [(displayName: String, issuer: String?, secretBase32: String)] = [
         ("you@example.com", "GitHub", "JBSWY3DPEHPK3PXP"),

@@ -26,7 +26,8 @@ struct AccountListView: View {
                 pulse: CodePulse.shared.value,
                 onCopy: copy,
                 onEdit: onEdit,
-                onDelete: onDelete
+                onDelete: onDelete,
+                onReorderFailure: { toast.show("排序保存失败，请重试") }
             )
 
             footer
@@ -110,29 +111,147 @@ private struct AccountRows: View {
     var onCopy: (Account) -> Bool
     var onEdit: (Account) -> Void
     var onDelete: (Account) -> Void
+    /// DR-01：排序落盘失败时的提示（不静默）
+    var onReorderFailure: () -> Void
+
+    /// 拖动排序会话状态
+    @State private var reorder = ListReorderModel()
+
+    private var rows: [Account] { store.filteredAccounts }
+
+    /// 搜索过滤时不支持拖动排序：「插到某条前后」在过滤视图里对应的全量位置不明确，
+    /// 强行映射会让用户看到的结果与预期不符（宁可禁用，也不做猜谜式落位）。
+    private var allowsReorder: Bool {
+        store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 单行步长（行高 + 行间距）—— 固定行高让插入位可以纯算术推导，无需读几何
+    private var step: CGFloat { Token.Metrics.rowHeight + Token.Metrics.rowSpacing }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: Token.Metrics.rowSpacing) {
-                ForEach(store.filteredAccounts) { account in
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, account in
+                    let isDragging = reorder.draggingID == account.id
+
                     SwipeableAccountRow(
                         account: account,
                         code: store.displayCode(for: account.id),
                         isOpen: store.openedRowID == account.id,
+                        isReordering: isDragging,
+                        allowsReorder: allowsReorder,
                         onTapCopy: { onCopy(account) },
                         onEdit: { onEdit(account) },
                         onDelete: { onDelete(account) },
-                        onSetOpen: { store.setOpenedRow($0 ? account.id : nil) }
+                        onSetOpen: { store.setOpenedRow($0 ? account.id : nil) },
+                        onReorderBegin: { beginReorder(account, at: index) },
+                        onReorderChange: { translationY in reorder.update(translationY: translationY) },
+                        onReorderEnd: endReorder
                     )
+                    // 拖动行跟随光标；其余行按插入位让位
+                    .offset(y: (isDragging ? reorder.offsetY : 0) + reorder.shift(forRowAt: index))
+                    .zIndex(isDragging ? 1 : 0)
+                    .animation(.easeOut(duration: 0.18), value: reorder.insertionIndex)
                 }
             }
             .padding(.horizontal, Token.Metrics.listPaddingH)
             .padding(.vertical, Token.Metrics.listPaddingV)
+            .overlay(alignment: .top) { insertionIndicator }
+            .onAppear {
+                #if DEBUG
+                // --debug-reorder-drag：注入「第 1 行被往下拖两行」的状态，便于截图核对视觉
+                if DebugFlags.simulatesReorderDrag, !reorder.isActive, rows.count > 2 {
+                    reorder.begin(id: rows[0].id, originIndex: 0, step: step, count: rows.count)
+                    reorder.update(translationY: step * 2 + 6)
+                    RowTrace.log(
+                        "debug-reorder injected dragged=\(rows[0].displayName) step=\(step) "
+                        + "order=[\(rows.map(\.displayName).joined(separator: ","))]"
+                    )
+                }
+                #endif
+            }
         }
         // 铁律：滚动容器一律 `.never` —— 不创建 scroller（has=0 / scroller=nil / 占位 0px）。
         // 勿改回 `.hidden`：它只把滚动条藏起来，占位与创建照旧（实测挤压裁剪区 17px，
         // 会使内容左右微移）。取证：`--scroll-probe <path>`（DEBUG 自报 NSScrollView 几何）。
         .scrollIndicators(.never)
+    }
+
+    /// 插入位指示线（只在真正会改变顺序时出现）
+    ///
+    /// 线画在**落点槽位的上沿**（而不是原始缝隙），这样用户看到的线与行实际落下的位置一致。
+    @ViewBuilder
+    private var insertionIndicator: some View {
+        if reorder.hasPendingMove, let landing = reorder.landingIndex {
+            RoundedRectangle(cornerRadius: Token.Metrics.reorderIndicatorHeight / 2)
+                .fill(Token.Palette.accent)
+                .frame(height: Token.Metrics.reorderIndicatorHeight)
+                .padding(.horizontal, Token.Metrics.listPaddingH + Token.Metrics.rowHPadding)
+                .offset(y: indicatorY(forLanding: landing))
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func indicatorY(forLanding landing: Int) -> CGFloat {
+        max(
+            Token.Metrics.listPaddingV - Token.Metrics.rowSpacing / 2,
+            Token.Metrics.listPaddingV + CGFloat(landing) * step - Token.Metrics.rowSpacing / 2
+                - Token.Metrics.reorderIndicatorHeight / 2
+        )
+    }
+
+    // MARK: - DR-01 拖动排序
+
+    private func beginReorder(_ account: Account, at index: Int) {
+        store.setOpenedRow(nil)   // 先收起左滑，避免「左滑位移 + 拖动位移」叠加
+        reorder.begin(id: account.id, originIndex: index, step: step, count: rows.count)
+        #if DEBUG
+        RowTrace.log(
+            "reorder begin id=\(account.displayName) origin=\(index) count=\(rows.count) "
+            + "order=[\(rows.map(\.displayName).joined(separator: ","))]"
+        )
+        #endif
+    }
+
+    /// 落定：把拖动行放到插入位对应的目标行之前/之后
+    private func endReorder() {
+        defer { reorder.end() }
+
+        // 防线：位移未达激活阈值就结束的会话不提交（手势被系统取消 / 视图重建 /
+        // 调试注入等情况下会走到这里，若不拦住会**悄悄改掉用户排好的顺序**）
+        guard abs(reorder.offsetY) >= Token.Metrics.reorderActivation,
+              reorder.hasPendingMove,
+              let insertion = reorder.insertionIndex,
+              let draggingID = reorder.draggingID
+        else { return }
+
+        let origin = reorder.originIndex
+        let target: (id: UUID, position: ReorderLogic.Position)
+
+        if insertion > origin + 1 {
+            // 向下拖：落到「插入位前一行」之后
+            guard insertion - 1 < rows.count else { return }
+            target = (rows[insertion - 1].id, .after)
+        } else if insertion < origin {
+            // 向上拖：落到「插入位那一行」之前
+            guard insertion < rows.count else { return }
+            target = (rows[insertion].id, .before)
+        } else {
+            return
+        }
+
+        #if DEBUG
+        RowTrace.log(
+            "reorder end origin=\(origin) insertion=\(insertion) target=\(target.position) "
+            + "dy=\(reorder.offsetY)"
+        )
+        #endif
+
+        do {
+            try store.move(id: draggingID, relativeTo: target.id, position: target.position)
+        } catch {
+            onReorderFailure()   // E1 精神：失败不静默
+        }
     }
 }
 
@@ -144,18 +263,28 @@ private struct SwipeableAccountRow: View {
     let account: Account
     let code: String?
     let isOpen: Bool
+    /// DR-01：本行正在被拖动排序
+    let isReordering: Bool
+    /// DR-01：当前是否允许拖动排序（搜索过滤中禁用）
+    let allowsReorder: Bool
     /// 点按复制，返回是否成功（成功 → 行闪烁 R1）
     var onTapCopy: () -> Bool
     var onEdit: () -> Void
     var onDelete: () -> Void
     /// 展开/收起 → 写回 store.openedRowID（R9 单值互斥）
     var onSetOpen: (Bool) -> Void
+    /// DR-01：拖动排序回调
+    var onReorderBegin: () -> Void
+    var onReorderChange: (CGFloat) -> Void
+    var onReorderEnd: () -> Void
 
     @State private var model = SwipeRowModel(
         maxOffset: Token.Metrics.swipeMaxOffset,
         snapThreshold: Token.Metrics.swipeSnapThreshold,
         dragThreshold: Token.Metrics.swipeDragThreshold
     )
+    /// DR-01：排序刚结束的瞬间系统可能补发一次 click，需吞掉（与 R6 同理）
+    @State private var lastReorderEnd: Date?
 
     /// R10：拖拽中关闭过渡（跟手），释放后恢复吸附曲线 cubic-bezier(.2,.8,.2,1)
     private var offsetAnimation: Animation? {
@@ -169,6 +298,13 @@ private struct SwipeableAccountRow: View {
             actionBlock
             rowContent
         }
+        // DR-01：拖动中的行「抬起」——轻微放大 + 投影，明确区分于原位行
+        .scaleEffect(isReordering ? 1.02 : 1)
+        .shadow(
+            color: isReordering ? Color.black.opacity(0.5) : .clear,
+            radius: isReordering ? 10 : 0,
+            y: isReordering ? 5 : 0
+        )
         // 首帧即已展开（如调试钩子 / 状态预设）：直接对齐，避免
         // `onChange` 不触发导致「store 说展开、视觉没展开」的不一致
         .onAppear {
@@ -231,6 +367,7 @@ private struct SwipeableAccountRow: View {
             account: account,
             code: code,
             isOpen: isOpen,
+            isReordering: isReordering,
             onTap: handleTap
         )
         .offset(x: model.offset)
@@ -238,10 +375,41 @@ private struct SwipeableAccountRow: View {
         .gesture(dragGesture)
     }
 
+    /// 统一拖动手势（DR-01 v1.10）
+    ///
+    /// **竖直 → 拖动排序，水平 → 左滑**，由方向 + 距离双重判定分流：
+    /// - 水平且 |dx| > 8（`swipeDragThreshold`）→ 走 `SwipeRowModel`（原 R2–R4）
+    /// - 竖直且 |dy| ≥ 24（`reorderActivation`）→ 走排序会话
+    /// - 两者都不满足（小幅抖动 / 轻点）→ 不做任何事，点击仍走 `onTapGesture`
+    ///
+    /// macOS 上鼠标拖动**不会滚动** NSScrollView（滚动靠滚轮/触控板），
+    /// 所以这里与列表滚动天然不冲突，无需长按等额外门槛。
     private var dragGesture: some Gesture {
-        // R4：minimumDistance 8；R4 的方向判定在 model.dragChanged 内完成
         DragGesture(minimumDistance: Token.Metrics.swipeDragThreshold)
             .onChanged { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+
+                // 已在排序会话中：只更新位移
+                if isReordering {
+                    onReorderChange(dy)
+                    return
+                }
+
+                if allowsReorder,
+                   ReorderLogic.isVerticalReorder(
+                       dx: dx,
+                       dy: dy,
+                       activation: Token.Metrics.reorderActivation
+                   ) {
+                    // 排序前先收起左滑，避免两种位移叠加
+                    model.close()
+                    onReorderBegin()
+                    onReorderChange(dy)
+                    return
+                }
+
+                // R4：水平拖拽（方向判定在 model.dragChanged 内完成）
                 let wasDragging = model.isDragging
                 model.dragChanged(value.translation)
                 // R9：一旦确认为本行的横向拖拽，立即收起其他行（对齐 Demo pointerdown 行为）
@@ -250,14 +418,22 @@ private struct SwipeableAccountRow: View {
                 }
             }
             .onEnded { _ in
+                if isReordering {
+                    lastReorderEnd = Date()   // 吞掉紧随其后的 click（与 R6 同思路）
+                    onReorderEnd()
+                    return
+                }
                 model.dragEnded()
                 onSetOpen(model.isOpen)   // R3 落定后回写互斥状态
             }
     }
 
-    /// R5/R6：点按语义 —— 展开行点按仅收起；拖拽刚结束的 click 吞掉
+    /// R5/R6/DR-01：点按语义 —— 展开行点按仅收起；拖拽（左滑或排序）刚结束的 click 吞掉
     private func handleTap() -> Bool {
         guard !model.shouldSuppressTap() else { return false }   // R6
+        if let last = lastReorderEnd, Date().timeIntervalSince(last) < 0.15 {
+            return false                                         // DR-01：排序落定后的补发 click
+        }
         if model.isOpen || isOpen {
             onSetOpen(false)                                     // R5
             return false
@@ -295,6 +471,8 @@ private struct AccountRowView: View {
     let code: String?
     /// 展开态行底色 = surface（Demo `.acc-row.open`）
     let isOpen: Bool
+    /// DR-01：拖动排序中（底色提亮，配合外层的投影做出「抬起」观感）
+    let isReordering: Bool
     /// 返回复制是否成功（R1：成功才闪烁 `#2E3237`）
     var onTap: () -> Bool
 
@@ -304,6 +482,7 @@ private struct AccountRowView: View {
 
     private var background: Color {
         if flashCopy { return Token.Palette.copied }
+        if isReordering { return Token.Palette.actionDetail }   // DR-01：拖动中提亮（#2E3237）
         if hovering || isOpen { return Token.Palette.surface }
         return Token.Palette.winBg
     }

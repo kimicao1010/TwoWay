@@ -41,7 +41,7 @@ struct QRImportTests {
     }
 
     private let otpauthURI =
-        "otpauth://totp/GitHub:kimi%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30"
+        "otpauth://totp/GitHub:you%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30"
 
     // MARK: Vision 解码往返
 

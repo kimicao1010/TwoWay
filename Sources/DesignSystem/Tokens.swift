@@ -160,6 +160,14 @@ enum Token {
 
         /// 导入图片页拖放区**高度**（v1.10：宽度改为自适应 —— 窗口收窄到 360 后
         /// 内容区只有 320pt，固定 360 宽会溢出窗口）
+        /// DR-01 拖动排序的激活阈值（竖直位移）
+        ///
+        /// 刻意比左滑的 8pt 更迟钝：排序会**改数据**，误触代价高；
+        /// 且距离大于左滑阈值可以保证两种手势不互相截胡（方向 + 距离双重判定）。
+        static let reorderActivation: CGFloat = 24
+        /// DR-01 插入位指示线高度
+        static let reorderIndicatorHeight: CGFloat = 2
+
         static let scannerHeight: CGFloat = 340
         static let scannerRadius: CGFloat = 14
         static let dialogWidth: CGFloat = 304

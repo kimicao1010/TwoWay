@@ -86,6 +86,23 @@ final class EncryptedStore: SecretStoring {
         }
     }
 
+    /// 只替换元数据（DR-01 拖动排序）：原地改字段，**不读密钥**（S1）
+    func updateMetadata(id: UUID, metadataJSON: Data) throws {
+        try queue.sync {
+            var wallet = try readWallet()
+            guard let index = wallet.items.firstIndex(where: { $0.id == id }) else {
+                throw StoreError.itemNotFound
+            }
+            let existing = wallet.items[index]
+            wallet.items[index] = Wallet.Item(
+                id: existing.id,
+                secret: existing.secret,
+                metadataJSON: metadataJSON
+            )
+            try writeWallet(wallet)
+        }
+    }
+
     func read(id: UUID) throws -> KeychainStore.Entry {
         try queue.sync {
             let wallet = try readWallet()

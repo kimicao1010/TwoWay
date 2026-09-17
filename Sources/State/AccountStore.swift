@@ -105,8 +105,20 @@ final class AccountStore {
             }
         }
 
-        // PRD §7.4「添加后置顶」→ 统一按添加时间倒序
-        loaded.sort { $0.addedAt > $1.addedAt }
+        // DR-01：有自定义顺序（任一账户带 sortIndex）就按它升序；
+        // 否则沿用「添加时间倒序」（老钱包无顺序信息，不能突变用户看到的顺序）
+        if loaded.contains(where: { $0.sortIndex != nil }) {
+            loaded.sort { lhs, rhs in
+                switch (lhs.sortIndex, rhs.sortIndex) {
+                case let (l?, r?): return l != r ? l < r : lhs.addedAt > rhs.addedAt
+                case (_?, nil): return true          // 已排序的在前
+                case (nil, _?): return false
+                case (nil, nil): return lhs.addedAt > rhs.addedAt
+                }
+            }
+        } else {
+            loaded.sort { $0.addedAt > $1.addedAt }
+        }
 
         accounts = loaded
         secretCache = secretsInMemory
@@ -136,6 +148,47 @@ final class AccountStore {
         accounts.insert(account, at: 0)   // 新账户置顶
         secretCache[account.id] = secret
         codeCache[account.id] = nil
+
+        // DR-01：已存在自定义顺序时，必须给新账户一个序号，否则下次 load 时它会掉到末尾
+        // （nil 的排序规则是「按 addedAt 倒序垫底」）
+        if hasCustomOrder {
+            try assignDenseIndices()
+        }
+    }
+
+    /// 是否已存在用户自定义顺序（DR-01）
+    var hasCustomOrder: Bool {
+        accounts.contains { $0.sortIndex != nil }
+    }
+
+    /// DR-01 拖动排序：把 `id` 移到 `targetID` 的前面或后面
+    ///
+    /// - Returns: 是否真的发生了变化（原位放下返回 false，调用方据此决定是否提示）
+    @discardableResult
+    func move(id: UUID, relativeTo targetID: UUID, position: ReorderLogic.Position) throws -> Bool {
+        guard id != targetID,
+              let from = accounts.firstIndex(where: { $0.id == id }),
+              let target = accounts.firstIndex(where: { $0.id == targetID })
+        else { return false }
+
+        let insertion = position == .before ? target : target + 1
+        let reordered = ReorderLogic.moved(accounts, from: from, to: insertion)
+        guard reordered.map(\.id) != accounts.map(\.id) else { return false }
+
+        accounts = reordered
+        try assignDenseIndices()
+        codeCache = [:]   // 顺序变化不影响码值，但保持与其他写路径一致的谨慎（下次取码重算一次）
+        return true
+    }
+
+    /// 按当前数组顺序写入 0..<n 序号，**只落盘发生变化的账户**（S1：只改元数据，不碰密钥）
+    private func assignDenseIndices() throws {
+        for (index, account) in accounts.enumerated() where account.sortIndex != index {
+            var updated = account
+            updated.sortIndex = index
+            accounts[index] = updated
+            try secrets.updateMetadata(id: updated.id, metadataJSON: encoder.encode(updated))
+        }
     }
 
     /// 编辑账户（P1 C4-2）：名称 / 发行方 / 密钥 / 高级参数可改
@@ -221,7 +274,12 @@ final class AccountStore {
         }
 
         if didChange {
-            accounts.sort { $0.addedAt > $1.addedAt }   // 与其他入口一致的倒序
+            if hasCustomOrder {
+                // DR-01：已有自定义顺序时，导入的账户**追加到末尾**（不打断用户排好的次序）
+                try assignDenseIndices()
+            } else {
+                accounts.sort { $0.addedAt > $1.addedAt }   // 与其他入口一致的倒序
+            }
             codeCache = [:]
         }
         return (imported, skipped)
