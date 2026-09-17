@@ -48,7 +48,7 @@
 **方式一：DMG**
 
 ```bash
-bash scripts/release-package.sh      # 产出 dist/2way-0.1.0.dmg
+bash scripts/release-package.sh      # 产出 dist/2way-1.0.dmg
 ```
 
 打开 DMG 把 `2way.app` 拖入「应用程序」。产物使用**自签名证书**签名（`scripts/create-signing-cert.sh` 创建），无法通过公证：
