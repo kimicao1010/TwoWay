@@ -53,8 +53,8 @@
 
 ## 2. 环境实证结论
 
-本机：macOS 27.0 (26A428) · Xcode 27 · Apple Swift 6.4 · xcodegen 2.46.0（`xcodegen`）
-工作区 `（仓库根目录）`：**当前不是 git 仓库**。
+本机：macOS 27.0 (26A428) · Xcode 27 · Apple Swift 6.4 · xcodegen 2.46.0
+工作区即本仓库根目录（已推送 GitHub，见 README）。
 
 以下版本号来自本机 macOS SDK 的 `swiftinterface` / 头文件实测，非经验推断：
 

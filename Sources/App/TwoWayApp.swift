@@ -14,10 +14,19 @@ struct TwoWayApp: App {
     /// 逐条弹授权框不可接受）。安全边界见 `EncryptedStore` 类注释。
     ///
     /// 由 App 层持有：主窗口与状态栏下拉**共用同一实例**（单一数据源，避免双源不一致）
-    @State private var store = AccountStore(secrets: EncryptedStore())
+    @State private var store = AccountStore(secrets: EncryptedStore(directory: Self.walletDirectory))
 
     /// 应用偏好（隐藏 Dock 图标等），主窗口与状态栏共用
     @State private var settings = AppSettings()
+
+    /// 钱包目录：生产为默认目录；DEBUG 下 `--wallet-dir` 可指向隔离目录（截图用虚构数据）
+    private static var walletDirectory: URL? {
+        #if DEBUG
+        return DebugFlags.walletDirectoryOverride
+        #else
+        return nil
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup(id: Self.mainWindowID) {
@@ -62,6 +71,7 @@ struct TwoWayApp: App {
             MenuBarPreviewHost(store: store, settings: settings)
         }
         .defaultSize(width: 300, height: 400)
+        .windowResizability(.contentSize)   // 窗口贴合面板内容（截图用于文档时更像真实面板）
         #endif
     }
 }

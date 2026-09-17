@@ -16,7 +16,7 @@ struct AccountTests {
         ("git", true), ("GIT", true), ("Git", true),
         ("hub", true),
         ("公司", true),        // 发行方中文
-        ("kimi", true),
+        ("ops", true),
         ("工作号", true),
         ("zzz", false),
         ("", true),            // 空查询 = 不过滤

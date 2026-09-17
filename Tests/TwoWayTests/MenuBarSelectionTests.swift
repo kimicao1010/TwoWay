@@ -60,9 +60,9 @@ struct MenuBarSelectionTests {
             Account(displayName: "admin@example.com", issuer: "Homelab")
         ]
 
-        #expect(MenuBarSelection.entries(from: all, query: "SAFELINE").accounts.count == 1)
-        #expect(MenuBarSelection.entries(from: all, query: "  fnos  ").accounts.count == 1)
-        #expect(MenuBarSelection.entries(from: all, query: "kimi-nas").accounts.count == 1)
+        #expect(MenuBarSelection.entries(from: all, query: "ACME").accounts.count == 1)
+        #expect(MenuBarSelection.entries(from: all, query: "  homelab  ").accounts.count == 1)
+        #expect(MenuBarSelection.entries(from: all, query: "admin@example").accounts.count == 1)
         // 纯空白视为未搜索 → 回到「最多 5 条」语义（此处 2 条全列）
         #expect(MenuBarSelection.entries(from: all, query: "   ").accounts.count == 2)
     }

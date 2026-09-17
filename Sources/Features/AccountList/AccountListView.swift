@@ -59,10 +59,12 @@ struct AccountListView: View {
                 .foregroundStyle(Token.Palette.t3)
 
             #if DEBUG
-            // 调试：换码脉冲与秒脉冲（生产构建不显示）
-            Text("· \(CodePulse.shared.value)/\(SecondPulse.shared.value)")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(Token.Palette.t4)
+            // 调试：换码脉冲与秒脉冲（默认关闭 —— 截图/演示时不应出现调试痕迹；`--debug-pulse` 开启）
+            if DebugFlags.showsPulseCounter {
+                Text("· \(CodePulse.shared.value)/\(SecondPulse.shared.value)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Token.Palette.t4)
+            }
             #endif
 
             Spacer(minLength: 0)

@@ -18,5 +18,23 @@ enum AppBootstrap {
         guard !didLoad else { return }
         didLoad = true
         try store.load()
+
+        #if DEBUG
+        seedDemoDataIfRequested(store: store)
+        #endif
     }
+
+    #if DEBUG
+    /// `--seed-demo`：向（隔离的）钱包灌入虚构账户，用于产出可公开的截图
+    private static func seedDemoDataIfRequested(store: AccountStore) {
+        guard DebugFlags.seedsDemoData, store.accounts.isEmpty else { return }
+        for demo in DebugFlags.demoAccounts {
+            try? store.add(
+                displayName: demo.displayName,
+                issuer: demo.issuer,
+                secretBase32: demo.secretBase32
+            )
+        }
+    }
+    #endif
 }

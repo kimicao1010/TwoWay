@@ -393,12 +393,14 @@ body{
 <script>
 /* ================= 数据 ================= */
 const accounts = [
-  { id:'github',  name:'GitHub',        acct:'you@example.com',   secret:'JBSWY3DPEHPK3PXP',          added:'2026-08-14 10:24' },
-  { id:'google',  name:'Google',        acct:'alex@example.com', secret:'GEZDGNBVGY3TQOJQGEZDGNBVGY', added:'2026-07-02 18:03' },
-  { id:'aws',     name:'AWS 控制台',    acct:'ops@company.com',    secret:'MFRGGZDFMZTWQ2LK',           added:'2026-06-18 09:41' },
-  { id:'tencent', name:'腾讯云',        acct:'100029384756',       secret:'NBSWY3DPFQQFO33SNRSCC',      added:'2026-05-30 21:12' },
-  { id:'notion',  name:'Notion 工作区', acct:'kimi@company.com',   secret:'KRSXG5CTMVRXEZLU',           added:'2026-04-11 14:57' },
-  { id:'gitlab',  name:'GitLab',        acct:'kimi@gitlab.company',secret:'ONSWG4TFOQQGS4ZA',           added:'2026-03-25 11:08' }
+  // 演示数据为**纯虚构**账户（密钥取自 RFC 6238 测试向量，非任何真实账户），
+  // 请勿把真实账户信息写进本原型文件
+  { id:'github',  name:'GitHub',        acct:'you@example.com',    secret:'JBSWY3DPEHPK3PXP',          added:'2026-08-14 10:24' },
+  { id:'google',  name:'Google',        acct:'alex@example.com',   secret:'GEZDGNBVGY3TQOJQGEZDGNBVGY', added:'2026-07-02 18:03' },
+  { id:'aws',     name:'AWS 控制台',    acct:'ops@example.com',    secret:'MFRGGZDFMZTWQ2LK',           added:'2026-06-18 09:41' },
+  { id:'tencent', name:'腾讯云',        acct:'100000000001',       secret:'NBSWY3DPFQQFO33SNRSCC',      added:'2026-05-30 21:12' },
+  { id:'notion',  name:'Notion 工作区', acct:'team@example.com',   secret:'KRSXG5CTMVRXEZLU',           added:'2026-04-11 14:57' },
+  { id:'gitlab',  name:'GitLab',        acct:'dev@example.com',    secret:'ONSWG4TFOQQGS4ZA',           added:'2026-03-25 11:08' }
 ];
 let current = accounts[0];
 let screen  = 'list';

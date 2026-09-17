@@ -44,7 +44,7 @@ struct OTPAuthURITests {
     @Test("percent-encoded 的 label 能正确解码")
     func percentEncodedLabel() throws {
         let parsed = try OTPAuthURI.parse(
-            "otpauth://totp/GitHub%3Akimi%40example.com?secret=JBSWY3DPEHPK3PXP"
+            "otpauth://totp/GitHub%3Ayou%40example.com?secret=JBSWY3DPEHPK3PXP"
         )
         #expect(parsed.issuer == "GitHub")
         #expect(parsed.accountLabel == "you@example.com")
