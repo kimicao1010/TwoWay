@@ -91,7 +91,9 @@ enum Token {
     // MARK: - 尺寸（PRD §8.3、§6 G-01、7.1–7.6）
 
     enum Metrics {
-        static let windowWidth: CGFloat = 400
+        /// v1.10：400 → **360**（用户反馈 400 过宽，按 20 一档比选后拍板）。
+        /// 比选证据：`build/width-preview.png`（400/380/360/340/320 同数据实测对比）
+        static let windowWidth: CGFloat = 360
         /// v1.2 / D8：窗口总高 400×732 = 内容最小 700 + 32pt 隐形标题栏
         /// （TECH_PLAN §11 RK7：`.hiddenTitleBar` 保留 32pt 参与窗口尺寸计算且无法收回），
         /// 多出的 32pt 归列表区
@@ -156,7 +158,9 @@ enum Token {
         static let secondaryButtonHeight: CGFloat = 40
         static let previewCardHeight: CGFloat = 76
 
-        static let scannerSize = CGSize(width: 360, height: 340)
+        /// 导入图片页拖放区**高度**（v1.10：宽度改为自适应 —— 窗口收窄到 360 后
+        /// 内容区只有 320pt，固定 360 宽会溢出窗口）
+        static let scannerHeight: CGFloat = 340
         static let scannerRadius: CGFloat = 14
         static let dialogWidth: CGFloat = 304
         static let dialogRadius: CGFloat = 16

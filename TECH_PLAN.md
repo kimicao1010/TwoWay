@@ -20,7 +20,7 @@
 | D5 | 签名身份 | **自签 Code Signing 证书**（非 ad-hoc） | 密钥存储 S1 的可用性、全部构建流程，详见 §9 |
 | D6 | 平台范围 | **仅 macOS 原生**，不做跨平台 | PRD §4 范围外条款维持；评估过程见 §10 |
 | D7 | 二维码获取方式 | **仅图片导入**，移除摄像头扫码 | FR-04、页面 02、C2-6；PRD v1.1 |
-| D8 | 窗口高度 | **接受 400×732**（32pt 隐形标题栏让给列表区），不自绘交通灯 | G-01/G-02/G-03；PRD v1.2；实测依据 §11 RK7 |
+| D8 | 窗口尺寸 | **接受 360×732**（高度：32pt 隐形标题栏让给列表区；宽度：v1.10 由 400 收窄到 360，20 一档比选后拍板），不自绘交通灯 | G-01/G-02/G-03；PRD v1.2 + v1.10；实测依据 §11 RK7 |
 
 > D1 依据（v1.1 更新）：原依据 `AVCaptureMetadataOutput`（macOS 13.0+）随摄像头功能一并移除而作废；现依据为 `Observation` 框架 `@Observable` 的 **macOS 14.0** 下限（见 §2）。定 14.0 仍可无缺口覆盖 P0/P1/P2 全部需求。
 > D5 依据：本机 A/B 实测证明 ad-hoc 的 DR 随 cdhash 变化，重建后读取已存密钥会弹密码框（§9.2）。
@@ -30,7 +30,7 @@
 
 ## 1. 需求基线
 
-**产品定位**：macOS 原生 TOTP 验证器，400×700pt 竖向窄窗，仅深色，对标 Google Authenticator 的操作心智。
+**产品定位**：macOS 原生 TOTP 验证器，360×732pt 竖向窄窗，仅深色，对标 Google Authenticator 的操作心智。
 
 **P0 交付物（7 项）**
 验证码列表 · 点按复制 · 左滑操作（**编辑｜删除**）· 添加账户（**图片导入** + 手动）· 删除确认（就地）· TOTP 引擎与倒计时 · 搜索
@@ -87,7 +87,7 @@
 ## 3. 架构
 
 ```
-窗口外壳        NSWindow 400×700 (固定)  │  自绘标题栏 52pt (hiddenTitleBar + 交通灯)
+窗口外壳        NSWindow 360×732 (固定)  │  自绘标题栏 52pt (hiddenTitleBar + 交通灯)
                       ↓
 功能屏 · P0     验证码列表  │  添加账户(导入图片/手动)  │  编辑 / 删除确认(覆盖列表)
                       ↓
@@ -117,7 +117,7 @@
 
 ### 4.1 窗口与标题栏（D2 = 方案 A）
 
-- `WindowGroup` + `.windowStyle(.hiddenTitleBar)` + `.windowResizability(.contentSize)`，`content` 固定 400×700pt
+- `WindowGroup` + `.windowStyle(.hiddenTitleBar)` + `.windowResizability(.contentSize)`，`content` 固定 360×732pt
 - `NSWindow` 后置微调（通过 `NSViewRepresentable` 拿 `window`）：`titlebarAppearsTransparent = true`、`titlebarSeparatorStyle = .none`、`isMovableByWindowBackground = true`
 - 标题栏 52pt 自绘，左侧保留系统交通灯（`standardWindowButton(_:)` 可微调位置/间距），中间 13px Medium 标题，右侧上下文操作
 - **待 spike 验证**：系统窗口圆角与 PRD 12px 的实际差值；内容裁切的实现方式（`contentView.layer.cornerRadius` + `masksToBounds` vs 内层容器圆角）

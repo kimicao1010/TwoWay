@@ -116,7 +116,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | 卡 | 状态 | 内容 | 完成判据 |
 |---|---|---|---|
-| C6-1 | `[~]` | **窗口宽度收窄比选** —— 用户反馈 400 太宽，要求「20 一档」出预览确认。已实现 `WindowMetrics`（DEBUG 启动参数 `--width <pt>` 运行时覆盖，260–420 合法区间，非法值回落）+ 弹窗宽度自适应（`sheetWidth`，避免 380 的 sheet 顶出窄窗口）+ 5 档对比图（400/380/360/340/320 实测截图合成，320 下布局未破） | **待用户拍板宽度** → 拍板后改 `Token.Metrics.windowWidth` 并同步 PRD G-01 |
+| C6-1 | `[x]` | **窗口宽度 400 → 360**（用户 2026-09-17 拍板）—— `WindowMetrics`（DEBUG `--width` 运行时覆盖，260–420，非法值回落）+ 弹窗宽度自适应（`sheetWidth`）+ **导入页拖放区改宽度自适应**（原固定 360 宽，在 360 窗口下内容区仅 320 会溢出）+ 5 档对比图（`build/width-preview.png`） | 逐屏复核 360 下无溢出/截断异常 ✅（列表 / 导入图片 / 手动输入 / 导出弹窗）；PRD G-01 与 TECH_PLAN D8 已同步；170 测试全绿 |
 | C6-2 | `[x]` | **隐藏 Dock 图标设置** —— `AppSettings`（UserDefaults 持久化，键 `hideDockIcon`，非敏感信息）+ `Settings` scene（⌘, / 主窗口「⋯」→「偏好设置…」）+ 开关即时生效（`setActivationPolicy(.accessory / .regular)`，macOS 不支持运行时改 `LSUIElement`，这是官方等价手段）；4 个单测（默认值 / 持久化 / 策略映射 / 键名） | 实测：关闭时 `background only = false` 且 Dock 有挂锁图标；开启时 `background only = true`、Dock 无图标、菜单栏图标仍在 ✅ 截图；截图验证设置界面 ✅ |
 
 **C5-1 附带修复（重要）**：加状态栏后 App **启动即崩**（`AG::precondition_failure` → SIGABRT）。根因：`AccountStore` 在**视图 body 求值期间**写 `codeCache` / `secretCache` / `secretUnavailable` / `lastRetryTime` 这四个观察属性 —— 单 scene 时侥幸不崩，多 scene（主窗口 + 状态栏面板 + 预览窗各自一个 graph）后 Observation 在更新事务中途触发失效即 abort。修复：四个缓存全部标 `@ObservationIgnored`（刷新语义本来就由 `CodePulse` / `RingClock` 驱动，不依赖缓存的观察通知）。**教训：`@Observable` 类型里凡是「渲染路径上会被写」的缓存，必须 `@ObservationIgnored`。**
@@ -207,7 +207,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 | U6 | git 仓库 | **已完成** |
 | U9 | 证书创建方式 | **已完成**：脚本 `scripts/create-signing-cert.sh` 已创建并接入构建（C0-1b 校验 DR 通过） |
 | U13 | ~~D9 逃生通道缺口~~ | **已闭环（C4-3）**：加密备份文件用**用户口令**派生密钥（PBKDF2-HMAC-SHA256，210k 轮），不依赖 `master.key` —— 主密钥丢失时仍可从备份恢复 |
-| U12 | `index.html` 与 Ardot 设计稿的第 02 屏仍是 v1.0 摄像头形态（取景框/取景括号/扫描线），需按 PRD §7.4 改版为「导入图片」拖放区 | **C3-1 逐像素比对、C2-6** |
+| U12 | `index.html` 与 Ardot 设计稿的第 02 屏仍是 v1.0 摄像头形态（取景框/取景括号/扫描线），需按 PRD §7.4 改版为「导入图片」拖放区。**另：Demo 画布仍是 400×700（`index.html` 第 33 行），App 已收窄到 360×732，作视觉基准时须按宽度差换算**（列表列宽/截断位置会不同） | **C3-1 逐像素比对、C2-6** |
 
 ---
 
@@ -215,6 +215,7 @@ KeychainStore 测试用 `SecKeychainCreate` 注入**临时钥匙串**，全程�
 
 | 日期 | 变更 |
 |---|---|
+| 2026-09-17 | **C6-1 落定：窗口宽度 400 → 360**（用户拍板）。`Token.Metrics.windowWidth = 360`；**连带修掉一处溢出**：导入页拖放区原为固定 360×340，在 360 宽窗口下内容区仅 320pt 会顶出窗口 → 改 `scannerHeight: 340` + 宽度自适应（`maxWidth: .infinity`）；三个弹窗宽度此前已改 `sheetWidth` 自适应。逐屏复核（按窗口 ID 截图）：列表 / 导入图片（拖放区虚线框完整、引导卡换行正常）/ 手动输入（提示文案单行不换行、高级选项与预览卡正常）/ 导出弹窗（336 宽自适应，多项清单与口令字段不挤）。文档同步：PRD G-01 → **360×732**（§11 与 v1.10 修订记录）、TECH_PLAN D8 与架构图/定位描述 |
 | 2026-09-17 | **C6-2 隐藏 Dock 图标设置落地**：新增 `AppSettings`（UserDefaults 键 `hideDockIcon`）+ `SettingsView`（SwiftUI `Settings` scene → ⌘, 与主窗口「⋯」菜单入口）+ `AppBootstrap` 启动时应用激活策略。**实现要点：macOS 无法运行时改 Info.plist 的 `LSUIElement`，等价手段是 `NSApp.setActivationPolicy(.accessory / .regular)`**，切换即时生效无需重启。实测两种状态（`background only` true/false、Dock 图标有无、菜单栏图标仍在）+ 设置界面截图；测试 162 → 170 全绿 |
 | 2026-09-17 | **C6-1 窗口宽度比选（进行中）**：用户反馈 400 太宽。新增 `WindowMetrics`（DEBUG `--width <pt>` 运行时覆盖 + 纯函数解析含 4 个单测：无参/合法/非法（非数字、越界、缺值））+ 三个弹窗宽度改 `WindowMetrics.sheetWidth(...)` 自适应（否则 380 宽的 sheet 在窄窗口下会顶出去）；按 20 一档出 5 档实测对比图（400/380/360/340/320，同数据同状态，裁掉阴影后横向拼接），320 下布局未破（行标题按需截断、码与环位置正常）。**待用户拍板后落定 `Token.Metrics.windowWidth`** |
 | 2026-09-17 | **C5-2 放弃（用户决策）**：系统级搜索（Spotlight / Siri / 快捷指令）直接取码的调研结论保留在 PRD §12 备注（可行路径 = App Intents + App Shortcuts；红线 = 密钥与验证码绝不进任何明文索引），但用户决定不做 —— 收益（少点两下）与新增的意图/索引面、分发依赖不成比例 |

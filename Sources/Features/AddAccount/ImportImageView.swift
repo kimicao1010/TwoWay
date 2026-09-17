@@ -66,7 +66,8 @@ struct ImportImageView: View {
 
             content
         }
-        .frame(width: Token.Metrics.scannerSize.width, height: Token.Metrics.scannerSize.height)
+        .frame(maxWidth: .infinity)
+        .frame(height: Token.Metrics.scannerHeight)
         .overlay(
             RoundedRectangle(cornerRadius: Token.Metrics.scannerRadius)
                 .strokeBorder(
