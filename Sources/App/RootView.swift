@@ -14,6 +14,10 @@ struct RootView: View {
     @State private var debugInitialMethod: AddAccountView.Method = .manual
     /// DEBUG：load 失败时把错误码亮在界面上（排查生产 Keychain 路径用）
     @State private var loadErrorText: String?
+    /// DEBUG：把切屏淡入淡出时长放大（`--slow-transition <秒>`），让 260ms 级瞬态可被截图取证
+    @State private var screenFadeOverride: Double?
+    /// DEBUG：列表是否仍用 `.opacity` 过渡（`--list-transition-opacity`）—— 用于 A/B 取证，默认已修好
+    @State private var listUsesOpacityTransition = false
     /// 备份弹窗内的错误文案（口令错误 / 文件损坏等，就地提示不静默）
     @State private var backupSheetError: String?
 
@@ -21,8 +25,15 @@ struct RootView: View {
         ZStack {
             switch router.screen {
             case .list:
+                // 列表**不做淡入淡出**（`.identity`）。
+                //
+                // 根因（2026-09-17 取证）：`.opacity` 过渡会把透明度逐个施加到子树里的视图，
+                // 行底 alpha<1 时，ZStack 底层那张操作块（编辑｜删除）就会**透出来** ——
+                // 表现为「从子页回到主页时所有行闪现两个按钮」。行偏移始终为 0（`--row-trace` 日志
+                // 无任何 offset 变化），故与左滑状态无关，是纯合成问题。
+                // `.identity` 让列表「先就位、再让子页淡出」，既无透出，观感也更稳。
                 listScreen
-                    .transition(.opacity)
+                    .transition(listUsesOpacityTransition ? .opacity : .identity)
 
             case .addAccount:
                 AddAccountView(
@@ -79,7 +90,10 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: Token.Motion.screenTransition), value: router.screen)
+        .animation(
+            .easeInOut(duration: screenFadeOverride ?? Token.Motion.screenTransition),
+            value: router.screen
+        )
         .animation(.easeOut(duration: 0.22), value: router.pendingDeleteID)
         // Esc：有删除确认弹窗时先关弹窗（PRD §7.2 R8）
         .onExitCommand {
@@ -165,6 +179,39 @@ struct RootView: View {
                index + 1 < ProcessInfo.processInfo.arguments.count {
                 ScrollProbe.schedule(outputPath: ProcessInfo.processInfo.arguments[index + 1])
             }
+            // --row-trace <path>：行偏移/展开态/切屏时序自报（行闪现取证）
+            if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--row-trace"),
+               index + 1 < ProcessInfo.processInfo.arguments.count {
+                RowTrace.enable(path: ProcessInfo.processInfo.arguments[index + 1])
+                RowTrace.log("trace enabled")
+            }
+            // --slow-transition <秒>：放慢切屏淡入淡出，让 260ms 级瞬态可被截图取证
+            if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--slow-transition"),
+               index + 1 < ProcessInfo.processInfo.arguments.count,
+               let seconds = Double(ProcessInfo.processInfo.arguments[index + 1]) {
+                screenFadeOverride = seconds
+            }
+            // --list-transition-opacity：A/B 复现用（让列表回到「.opacity 过渡」的旧行为）
+            if ProcessInfo.processInfo.arguments.contains("--list-transition-opacity") {
+                listUsesOpacityTransition = true
+            }
+            // --debug-flip-screens [--flip-interval <秒>]：自驱列表 ↔ 添加页往返
+            if ProcessInfo.processInfo.arguments.contains("--debug-flip-screens") {
+                var interval: Double = 1.2
+                if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--flip-interval"),
+                   index + 1 < ProcessInfo.processInfo.arguments.count,
+                   let seconds = Double(ProcessInfo.processInfo.arguments[index + 1]) {
+                    interval = seconds
+                }
+                Task { @MainActor in
+                    var goToAdd = true
+                    while true {
+                        try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                        show(goToAdd ? .addAccount : .list)
+                        goToAdd.toggle()
+                    }
+                }
+            }
             // --debug-import-file <path>：启动即模拟「拖入图片解码 → 导入」完整链路
             // （手工回归用：免掉无障碍权限下无法程序化拖放的局限）
             if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--debug-import-file"),
@@ -235,6 +282,9 @@ struct RootView: View {
 
     private func show(_ screen: AppRouter.Screen) {
         store.setOpenedRow(nil)   // R9/E8：离开列表屏时行复位
+        #if DEBUG
+        RowTrace.log("show \(screen)")
+        #endif
         router.screen = screen
     }
 

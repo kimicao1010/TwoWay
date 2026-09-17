@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <!-- 2way · macOS 状态栏图标（主方案，含钥匙孔）
+       单色 black + clear；系统会自动着色以适配浅色/深色菜单栏与选中态。
+       几何基准：16 × 16 pt 工作区，图形占 11.6 × 11.6 pt，四周留 2.2 pt。
+       锁梁描边 1.8 pt、锁体圆角 2.1 pt。 -->
+  <path d="M5 8 L5 6.1 A3 3 0 0 1 11 6.1 L11 8"
+        stroke="#000000" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  <path d="M4.3 6.4 L11.7 6.4 A2.1 2.1 0 0 1 13.8 8.5 L13.8 11.7 A2.1 2.1 0 0 1 11.7 13.8 L4.3 13.8 A2.1 2.1 0 0 1 2.2 11.7 L2.2 8.5 A2.1 2.1 0 0 1 4.3 6.4 Z
+           M7.4 10.465 A1.4 1.4 0 1 1 8.6 10.465 L8.6 11.6 Q8.6 12.15 8 12.15 Q7.4 12.15 7.4 11.6 Z"
+        fill="#000000" fill-rule="evenodd"/>
+</svg>

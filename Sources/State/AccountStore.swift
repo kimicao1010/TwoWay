@@ -232,6 +232,9 @@ final class AccountStore {
     // MARK: - 行展开（R9）
 
     func setOpenedRow(_ id: UUID?) {
+        #if DEBUG
+        RowTrace.log("setOpenedRow \(id.map { String($0.uuidString.prefix(4)) } ?? "nil")")
+        #endif
         openedRowID = id
     }
 

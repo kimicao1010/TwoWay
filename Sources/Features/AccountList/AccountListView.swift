@@ -170,11 +170,32 @@ private struct SwipeableAccountRow: View {
         // 首帧即已展开（如调试钩子 / 状态预设）：直接对齐，避免
         // `onChange` 不触发导致「store 说展开、视觉没展开」的不一致
         .onAppear {
+            #if DEBUG
+            RowTrace.log("appear \(account.displayName) isOpen=\(isOpen) offset=\(model.offset)")
+            #endif
             if isOpen { model.open() }
         }
+        #if DEBUG
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear {
+                        RowTrace.log("zstack \(account.displayName) w=\(geo.size.width) h=\(geo.size.height)")
+                    }
+            }
+        )
+        .onChange(of: model.offset) { old, new in
+            if abs(old) > 0.01 || abs(new) > 0.01 {
+                RowTrace.log("offset \(account.displayName) \(old) → \(new) phase=\(model.phase)")
+            }
+        }
+        #endif
         // isOpen 由 AccountRows 依据 store.openedRowID 计算，
         // 它变化即 R9 互斥同步 / R7 R8 复位 / E8 切屏复位
         .onChange(of: isOpen) { _, open in
+            #if DEBUG
+            RowTrace.log("isOpen \(account.displayName) → \(open) offset=\(model.offset)")
+            #endif
             if open {
                 model.open()          // R9：本行被置为展开
             } else if !model.isDragging {
