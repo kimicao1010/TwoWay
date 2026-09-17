@@ -45,12 +45,20 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         COMBINE_HIDPI_IMAGES: YES
 
+        # App 图标：`Sources/Resources/Assets.xcassets/AppIcon.appiconset`
+        # （由根目录 `2way.iconset` 的 10 个尺寸拷入；actool 编译进 Assets.car，
+        #  Dock / Finder / Cmd-Tab / 关于窗口统一生效）
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
     info:
       path: Sources/App/Info.plist
       properties:
         CFBundleName: 2way
         CFBundleDisplayName: 2way
         CFBundlePackageType: APPL
+        # macOS 11+ 的图标键：指向 Asset Catalog 里的 AppIcon 图标集
+        # （xcodegen 生成静态 Info.plist，不会像 Xcode 那样由 actool 自动注入该键，故显式声明）
+        CFBundleIconName: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
