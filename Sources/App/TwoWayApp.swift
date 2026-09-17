@@ -47,11 +47,29 @@ struct TwoWayApp: App {
         .menuBarExtraStyle(.window)
 
         #if DEBUG
-        // 仅调试：把状态栏面板放到普通窗口里，便于截图/回归（菜单栏面板无法按窗口 ID 截取）
+        // 仅调试：把状态栏面板放到普通窗口里，便于截图/回归（菜单栏面板无法按窗口 ID 截取）。
+        // ⚠️ `Window` scene 默认会随 App 启动一起打开 —— 由宿主视图在非调试启动时自动关掉，
+        //    否则每次调试构建都会多出一个空窗。
         Window("状态栏面板预览", id: Self.menuBarPreviewWindowID) {
-            MenuBarView(store: store)
+            MenuBarPreviewHost(store: store)
         }
         .defaultSize(width: 300, height: 400)
         #endif
     }
 }
+
+#if DEBUG
+/// 状态栏面板预览窗宿主（仅 `--debug-menubar` 启动时保留该窗）
+private struct MenuBarPreviewHost: View {
+    let store: AccountStore
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        MenuBarView(store: store)
+            .task {
+                guard !ProcessInfo.processInfo.arguments.contains("--debug-menubar") else { return }
+                dismissWindow(id: TwoWayApp.menuBarPreviewWindowID)
+            }
+    }
+}
+#endif
